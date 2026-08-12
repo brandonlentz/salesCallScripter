@@ -1,8 +1,16 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
-// Bridge for renderer -> main process calls (e.g. Claude API requests,
-// system-audio capture control) will be added here as those features land.
-const api = {}
+const api = {
+  training: {
+    listTranscripts: () => ipcRenderer.invoke('training:list-transcripts'),
+    loadTranscript: (id) => ipcRenderer.invoke('training:load-transcript', id)
+  },
+  suggestions: {
+    // Additional bridge methods (system-audio capture control, etc.) will be
+    // added here as the live-call pipeline lands.
+    get: (transcriptText) => ipcRenderer.invoke('suggestions:get', transcriptText)
+  }
+}
 
 try {
   contextBridge.exposeInMainWorld('api', api)

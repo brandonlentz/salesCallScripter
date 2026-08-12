@@ -1,8 +1,32 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { NEPQ_STAGES } from './nepqStages'
+import TrainingPanel from './TrainingPanel'
+
+const initialSuggestionState = {
+  loading: false,
+  error: '',
+  stage: null,
+  stageRationale: '',
+  suggestions: []
+}
 
 function App() {
-  const [activeStage, setActiveStage] = useState(NEPQ_STAGES[0].id)
+  const [transcriptText, setTranscriptText] = useState('')
+  const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
+
+  const requestSuggestions = useCallback(async (text) => {
+    if (!text.trim()) return
+
+    setSuggestionState((prev) => ({ ...prev, loading: true, error: '' }))
+    try {
+      const result = await window.api.suggestions.get(text)
+      setSuggestionState({ loading: false, error: '', ...result })
+    } catch (err) {
+      setSuggestionState((prev) => ({ ...prev, loading: false, error: err.message }))
+    }
+  }, [])
+
+  const activeStage = suggestionState.stage ?? NEPQ_STAGES[0].id
 
   return (
     <div className="app">
@@ -13,35 +37,55 @@ function App() {
 
       <nav className="stage-tracker" aria-label="NEPQ stages">
         {NEPQ_STAGES.map((stage) => (
-          <button
+          <span
             key={stage.id}
-            type="button"
             className={`stage-tracker__item${stage.id === activeStage ? ' is-active' : ''}`}
-            onClick={() => setActiveStage(stage.id)}
             title={stage.description}
           >
             {stage.label}
-          </button>
+          </span>
         ))}
       </nav>
 
       <main className="app__main">
         <section className="panel panel--transcript">
           <h2>Live Transcript</h2>
-          <p className="panel__placeholder">
-            Audio capture and speech-to-text aren&apos;t wired up yet. This panel will show the
-            rolling transcript of the call once that lands.
-          </p>
+          {transcriptText ? (
+            <pre className="panel__transcript">{transcriptText}</pre>
+          ) : (
+            <p className="panel__placeholder">
+              Nothing yet. Load a transcript in Training Mode below, or, once wired up, start a
+              live call.
+            </p>
+          )}
         </section>
 
         <section className="panel panel--suggestions">
           <h2>Suggested NEPQ Prompts</h2>
-          <p className="panel__placeholder">
-            Claude-generated suggestions for the current stage will appear here once the
-            suggestion engine is connected.
-          </p>
+          {suggestionState.loading && <p className="panel__hint">Thinking…</p>}
+          {suggestionState.error && <p className="panel__error">{suggestionState.error}</p>}
+          {!suggestionState.loading &&
+            !suggestionState.error &&
+            suggestionState.suggestions.length === 0 && (
+              <p className="panel__placeholder">
+                No suggestions yet. Play a transcript in Training Mode or click &ldquo;Get
+                Suggestions Now&rdquo;.
+              </p>
+            )}
+          {suggestionState.stageRationale && (
+            <p className="panel__hint">{suggestionState.stageRationale}</p>
+          )}
+          <ul className="suggestions-list">
+            {suggestionState.suggestions.map((s, i) => (
+              <li key={i} className={`suggestions-list__item suggestions-list__item--${s.type}`}>
+                {s.text}
+              </li>
+            ))}
+          </ul>
         </section>
       </main>
+
+      <TrainingPanel onTranscriptChange={setTranscriptText} onSuggestions={requestSuggestions} />
     </div>
   )
 }

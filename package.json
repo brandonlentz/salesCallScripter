@@ -13,6 +13,8 @@
     "start": "electron-vite preview"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "dotenv": "^17.4.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

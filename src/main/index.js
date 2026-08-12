@@ -1,5 +1,14 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { config as loadEnv } from 'dotenv'
+import { listTranscripts, loadTranscript } from './trainingTranscripts.js'
+import { getSuggestions } from './suggestions.js'
+
+// Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
+// directories below the project root, so this resolves correctly either way.
+const appRootDir = join(import.meta.dirname, '../..')
+
+loadEnv({ path: join(appRootDir, '.env'), quiet: true })
 
 const isDev = !app.isPackaged
 
@@ -33,7 +42,14 @@ function createWindow() {
   }
 }
 
+function registerIpcHandlers() {
+  ipcMain.handle('training:list-transcripts', () => listTranscripts(appRootDir))
+  ipcMain.handle('training:load-transcript', (_event, id) => loadTranscript(appRootDir, id))
+  ipcMain.handle('suggestions:get', (_event, transcriptText) => getSuggestions(transcriptText))
+}
+
 app.whenReady().then(() => {
+  registerIpcHandlers()
   createWindow()
 
   app.on('activate', () => {
