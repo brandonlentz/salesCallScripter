@@ -32,7 +32,22 @@ export async function getSuggestions(transcriptText, callType) {
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 500,
-    system: buildSystemPrompt(callType),
+    // This is a bounded classification/retrieval task grounded in the fixed
+    // call script (not open-ended reasoning), and it's on the critical path
+    // of a live call — skip extended thinking and keep effort low so a
+    // suggestion comes back in a second or two, not several.
+    thinking: { type: 'disabled' },
+    output_config: { effort: 'low' },
+    system: [
+      {
+        type: 'text',
+        text: buildSystemPrompt(callType),
+        // The script text is identical on every request for a given call
+        // type — cache it so repeat requests only pay for the (short)
+        // rolling transcript instead of reprocessing the whole script.
+        cache_control: { type: 'ephemeral' }
+      }
+    ],
     messages: [
       {
         role: 'user',
