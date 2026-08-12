@@ -93,18 +93,48 @@ since they contain customer PII.
 
 ## Live Call
 
-1. Dial out through the macOS **Phone app**, with the call on **speaker** — not headphones or
-   AirPods. Audio capture is a single built-in-mic stream; with the call on speaker, the mic
-   naturally picks up both your voice and the prospect's, and Deepgram's diarization splits it
-   back into two speakers. (No BlackHole or virtual audio device needed.)
-2. Switch to **Live Call** mode, pick the right **Call type**, and click **Start Call**. macOS
+Two ways to capture call audio — the app supports both, and picks whichever you've set up via
+the device pickers in the Live Call panel.
+
+### Option A: Single-mic mode (works today, no extra setup)
+
+Dial out through the macOS **Phone app** with the call on **speaker** — not headphones or
+AirPods. The built-in mic naturally picks up both your voice and the prospect's, and
+Deepgram's diarization guesses which parts are which. Leave **Caller audio** set to "None" in
+the Live Call panel. Quality depends on room acoustics (quiet room, Mac speaker/mic both near
+you).
+
+### Option B: Dual-stream mode (recommended — exact speaker separation, works with headphones)
+
+Captures your mic and the Phone app's call audio as two independent streams, so there's no
+guessing which speaker is which. One-time setup:
+
+1. Install [**BlackHole 2ch**](https://existential.audio/blackhole/) (`brew install --cask
+   blackhole-2ch`), then **reboot** — the driver won't be recognized until you do.
+2. Open **Audio MIDI Setup** (Spotlight → "Audio MIDI Setup"), click **+** → **Create Multi-Output
+   Device**, and check both your normal output (e.g. MacBook Pro Speakers) and **BlackHole 2ch**.
+   This lets you still hear the call while it's also captured.
+3. During calls, set this Multi-Output Device as your Mac's audio output (Control Center or
+   System Settings → Sound → Output). The Phone app doesn't have its own device picker, so this
+   has to be the system output while you're on a call.
+4. In the Live Call panel, set **Caller audio** to the **BlackHole 2ch** device (auto-selected if
+   found) and **Your mic** to your real microphone. The panel will confirm it's in dual-stream
+   mode.
+
+Note: routing system output through the Multi-Output Device affects *all* system sound, not
+just calls — you'll probably want to switch back to normal output when you're not on a call.
+
+### Using it
+
+1. Switch to **Live Call** mode, pick the right **Call type**, and click **Start Call**. macOS
    will prompt for microphone access the first time.
-3. As the call plays out, transcribed lines appear labeled **You** / **Them** — whoever speaks
-   first is assumed to be you. If that guess is backwards, click **Swap Speakers** to relabel
-   the whole transcript so far (and everything after).
-4. Suggestions auto-request after the prospect speaks (toggle this off if you'd rather trigger
+2. Transcribed lines appear labeled **You** / **Them**. In single-mic mode this is a guess
+   (whoever speaks first is assumed to be you) — click **Swap Speakers** if it's backwards, which
+   relabels the whole transcript so far and everything after. In dual-stream mode labels are
+   exact, so there's no Swap button.
+3. Suggestions auto-request after the prospect speaks (toggle this off if you'd rather trigger
    them manually with **Get Suggestions Now** — each request calls the Claude API).
-5. **End Call** stops the mic and closes the Deepgram connection. **Clear** resets the
+4. **End Call** stops the mic and closes the Deepgram connection(s). **Clear** resets the
    transcript before your next call.
 
 Requires `DEEPGRAM_API_KEY` in `.env` — without it, **Start Call** shows a clear error instead
