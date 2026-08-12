@@ -30,7 +30,8 @@ script rather than inventing new phrasing.
 - **Electron** — macOS desktop shell
 - **React + Vite** (via `electron-vite`) — renderer UI
 - **Deepgram** — live speech-to-text with speaker diarization
-- **Claude API** — real-time suggestion engine, grounded in the call scripts above
+- **Claude API** (Haiku 4.5) — real-time suggestion engine, grounded in the call scripts above,
+  tuned for low latency (see [Suggestion latency](#suggestion-latency) below)
 
 ## Getting Started
 
@@ -141,6 +142,29 @@ you're not on a call.
    them manually with **Get Suggestions Now** — each request calls the Claude API).
 4. **End Call** stops the mic and closes the Deepgram connection(s). **Clear** resets the
    transcript before your next call.
+
+### Suggestion latency
+
+Target is a suggestion on screen within 1-2 seconds of the prospect finishing a sentence. To get
+there:
+
+- **Model:** Claude Haiku 4.5, not Sonnet — this is bounded classification/retrieval against a
+  fixed script (which line comes next), not open-ended generation, so Haiku is both fast enough
+  and cheaper.
+- **Prompt caching:** the call script is identical on every request for a given call type, so
+  it's marked cacheable (`cache_control: ephemeral`) — only the short rolling transcript gets
+  processed fresh each time.
+- **Short suggestions:** the prompt caps each suggestion to one sentence under 25 words and
+  forbids quoting a whole multi-sentence script passage into one suggestion — both for speed
+  (shorter completions) and to avoid the response getting cut off mid-JSON before the
+  `max_tokens` cap.
+- **Short debounce:** the Live Call panel waits only 300ms after a final transcript line before
+  auto-requesting a suggestion (down from an initial 1200ms), since that delay sits entirely on
+  the critical path regardless of model speed.
+
+If it's ever still too slow, the next lever to check is Deepgram's own finalization delay
+(`utterance_end_ms` / endpointing in `src/main/deepgram.js`) — that's outside the suggestion
+engine and adds to the same budget.
 
 Requires `DEEPGRAM_API_KEY` in `.env` — without it, **Start Call** shows a clear error instead
 of connecting.
