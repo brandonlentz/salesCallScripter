@@ -50,3 +50,34 @@ sentence, not the whole block; trust the rep to keep reading from there. This is
 the response must fit in a small token budget, so never quote a multi-sentence script passage \
 into a single suggestion.`
 }
+
+// Formats a locally-saved property/lead record (see properties.js) into a
+// short context block. This is NOT part of buildSystemPrompt() above — it's
+// per-call, dynamic data (which property, which contact), so it goes in the
+// user message instead. Putting it in the system prompt would change the
+// system prompt on every property switch and invalidate the prompt cache
+// that's keyed on the script text being byte-identical call to call.
+export function buildPropertyContext(property) {
+  if (!property) return ''
+
+  const lines = ['=== PROPERTY CONTEXT (from REISift) ===']
+  const field = (label, value) => {
+    if (value) lines.push(`${label}: ${value}`)
+  }
+
+  field(
+    'Contact',
+    [property.contactName, property.contactRelationship].filter(Boolean).join(' — ')
+  )
+  field('Contact phone', property.contactPhone)
+  field('Deceased owner', property.deceasedName)
+  field('Property', property.propertyAddress)
+  field('Tax/legal status', property.taxStatus)
+  field('Case/file number', property.caseNumber)
+  field('Known heirs', property.knownHeirs)
+  field('Prior contact notes', property.priorContactNotes)
+  field('Offer amount', property.offerAmount)
+  field('Prior pain points', property.painPointsSummary)
+
+  return lines.length > 1 ? lines.join('\n') : ''
+}

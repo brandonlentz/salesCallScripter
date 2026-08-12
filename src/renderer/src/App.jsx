@@ -3,6 +3,7 @@ import { CALL_TYPES, getStages } from '../../shared/callScripts.js'
 import TrainingPanel from './TrainingPanel'
 import LiveCallPanel from './LiveCallPanel'
 import ScriptPanel from './ScriptPanel'
+import PropertyPanel from './PropertyPanel'
 
 const initialSuggestionState = {
   loading: false,
@@ -18,6 +19,8 @@ function App() {
   const [transcriptText, setTranscriptText] = useState('')
   const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
   const [scriptOpen, setScriptOpen] = useState(false)
+  const [selectedProperty, setSelectedProperty] = useState(null)
+  const [propertyOpen, setPropertyOpen] = useState(false)
 
   const requestSuggestions = useCallback(
     async (text) => {
@@ -25,13 +28,13 @@ function App() {
 
       setSuggestionState((prev) => ({ ...prev, loading: true, error: '' }))
       try {
-        const result = await window.api.suggestions.get(text, callType)
+        const result = await window.api.suggestions.get(text, callType, selectedProperty)
         setSuggestionState({ loading: false, error: '', ...result })
       } catch (err) {
         setSuggestionState((prev) => ({ ...prev, loading: false, error: err.message }))
       }
     },
-    [callType]
+    [callType, selectedProperty]
   )
 
   // Changing call type mid-session invalidates whatever stage/suggestions
@@ -87,6 +90,9 @@ function App() {
           </label>
           <button type="button" onClick={() => setScriptOpen(true)}>
             Script
+          </button>
+          <button type="button" onClick={() => setPropertyOpen(true)}>
+            {selectedProperty ? `Property: ${selectedProperty.label}` : 'Property'}
           </button>
         </div>
       </header>
@@ -155,6 +161,17 @@ function App() {
         onClose={() => setScriptOpen(false)}
         callType={callType}
         activeStage={activeStage}
+      />
+
+      <PropertyPanel
+        open={propertyOpen}
+        onClose={() => setPropertyOpen(false)}
+        selected={selectedProperty}
+        onSelect={(property) => {
+          setSelectedProperty(property)
+          setPropertyOpen(false)
+        }}
+        onClear={() => setSelectedProperty(null)}
       />
     </div>
   )

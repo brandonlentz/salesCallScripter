@@ -88,9 +88,43 @@ since they contain customer PII.
   Intro, Offer, or Associate.
 - **Script** button opens a drawer with the full word-for-word script for the current call
   type, auto-scrolled to whichever stage the suggestion engine thinks the call is in.
+- **Property** button opens a drawer for picking which property/lead the current call is
+  about — see [Property Context](#property-context) below. Works the same in Training and Live
+  Call mode.
 - **Stage tracker** (below the header) highlights the current stage of that script.
 - **Live Transcript** / **Suggested Next Lines** panels show the call so far and the engine's
   suggested next lines, pulled from the script.
+
+## Property Context
+
+Beyond the generic script, the suggestion engine can be grounded in specifics about the property
+and contact for this call — deceased owner, tax/legal status, known heirs, prior contact notes,
+offer amount — pulled from your REISift records.
+
+**Current state: manual entry, not a live REISift sync.** REISift doesn't publish a documented
+pull/search API for third-party apps, only a Zapier action and native outbound webhooks (both
+configured from REISift's own Settings → Integrations page). So for now:
+
+1. Click **Property** in the header, then **+ New Property**.
+2. Copy the relevant details over from REISift (deceased owner, property address, tax status,
+   known heirs, prior contact notes, etc.) into the form and save.
+3. Before a call, click **Property** and search/select the right one — search matches on label,
+   contact name, phone, or address. The selected property shows in the header and feeds every
+   suggestion request (Training and Live Call both) until you clear or switch it.
+
+Entries are stored locally (`src/main/properties.js`, Electron's userData dir — outside the repo,
+never committed, since they're seller PII) and are editable/deletable from the same drawer.
+
+**Property context and prompt caching don't conflict.** The property context is per-call, dynamic
+data, so it's injected into the user message alongside the transcript — not into the (cached)
+system prompt, which stays byte-identical per call type so caching still works (see
+[Suggestion latency](#suggestion-latency) above).
+
+**If/when real REISift API or webhook access gets sorted out:** the local property store's field
+shape (`label`, `contactName`, `contactPhone`, `contactRelationship`, `deceasedName`,
+`propertyAddress`, `taxStatus`, `caseNumber`, `knownHeirs`, `priorContactNotes`, `offerAmount`,
+`painPointsSummary`) is designed so a sync job could populate it directly — the search/pick UI
+and the suggestion-engine wiring wouldn't need to change, only how entries get created.
 
 ## Live Call
 

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { buildSystemPrompt } from './nepqPrompt.js'
+import { buildSystemPrompt, buildPropertyContext } from './nepqPrompt.js'
 import { CALL_TYPES, getStageIds } from '../shared/callScripts.js'
 
 const MAX_TOKENS = 700
@@ -18,8 +18,10 @@ function getClient() {
 
 // Given the call type and the rolling transcript text of a call (live or
 // replayed in Training Mode), ask Claude which stage of that call's script
-// the call is in and which lines from the script to surface next.
-export async function getSuggestions(transcriptText, callType) {
+// the call is in and which lines from the script to surface next. `property`
+// is an optional locally-saved property/lead record (see properties.js) —
+// pass null when no property is selected for this call.
+export async function getSuggestions(transcriptText, callType, property = null) {
   if (!CALL_TYPES.includes(callType)) {
     throw new Error(`Unknown call type: ${callType}`)
   }
@@ -59,7 +61,9 @@ export async function getSuggestions(transcriptText, callType) {
     messages: [
       {
         role: 'user',
-        content: `Transcript so far:\n\n${transcriptText}`
+        content: [buildPropertyContext(property), `Transcript so far:\n\n${transcriptText}`]
+          .filter(Boolean)
+          .join('\n\n')
       }
     ]
   })

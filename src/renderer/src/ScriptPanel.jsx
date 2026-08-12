@@ -21,16 +21,16 @@ export default function ScriptPanel({ open, onClose, callType, activeStage }) {
   if (!open) return null
 
   return (
-    <div className="script-drawer">
-      <div className="script-drawer__backdrop" onClick={onClose} />
-      <div className="script-drawer__panel">
-        <div className="script-drawer__header">
+    <div className="drawer">
+      <div className="drawer__backdrop" onClick={onClose} />
+      <div className="drawer__panel">
+        <div className="drawer__header">
           <h2>{callType[0].toUpperCase() + callType.slice(1)} Call Script</h2>
           <button type="button" onClick={onClose} aria-label="Close script">
             ✕
           </button>
         </div>
-        <div className="script-drawer__body" ref={scrollContainerRef}>
+        <div className="drawer__body" ref={scrollContainerRef}>
           {script.map((section) => {
             const isActive = section.stage === activeStage
             return (

@@ -4,6 +4,13 @@ import { config as loadEnv } from 'dotenv'
 import { listTranscripts, loadTranscript } from './trainingTranscripts.js'
 import { getSuggestions } from './suggestions.js'
 import { registerLiveCallHandlers } from './liveCall.js'
+import {
+  listProperties,
+  searchProperties,
+  saveProperty,
+  updateProperty,
+  deleteProperty
+} from './properties.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -48,9 +55,14 @@ function createWindow() {
 function registerIpcHandlers() {
   ipcMain.handle('training:list-transcripts', () => listTranscripts(appRootDir))
   ipcMain.handle('training:load-transcript', (_event, id) => loadTranscript(appRootDir, id))
-  ipcMain.handle('suggestions:get', (_event, { transcriptText, callType }) =>
-    getSuggestions(transcriptText, callType)
+  ipcMain.handle('suggestions:get', (_event, { transcriptText, callType, property }) =>
+    getSuggestions(transcriptText, callType, property)
   )
+  ipcMain.handle('properties:list', () => listProperties())
+  ipcMain.handle('properties:search', (_event, query) => searchProperties(query))
+  ipcMain.handle('properties:save', (_event, data) => saveProperty(data))
+  ipcMain.handle('properties:update', (_event, { id, data }) => updateProperty(id, data))
+  ipcMain.handle('properties:delete', (_event, id) => deleteProperty(id))
   registerLiveCallHandlers(() => mainWindow)
 }
 
