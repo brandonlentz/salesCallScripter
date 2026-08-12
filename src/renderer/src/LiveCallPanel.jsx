@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const AUTO_SUGGEST_DEBOUNCE_MS = 1200
+// Deepgram only marks a channel entry final at a genuine pause, so there's
+// little upside in waiting long after that to ask for suggestions — every
+// ms here comes straight out of the 1-2s target from "prospect stops
+// talking" to "suggestion on screen". Kept non-zero only to let a couple of
+// back-to-back final fragments settle before firing.
+const AUTO_SUGGEST_DEBOUNCE_MS = 300
 const NO_DEVICE = ''
 
 // Captures live-call audio and streams it to Deepgram via the main process.

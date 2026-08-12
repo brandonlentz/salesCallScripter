@@ -30,21 +30,24 @@ export async function getSuggestions(transcriptText, callType) {
   }
 
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-5',
+    // Haiku 4.5: this is on the critical path of a live call (target is a
+    // suggestion within 1-2s of the prospect finishing a sentence), and it's
+    // a bounded classification/retrieval task grounded in the fixed call
+    // script, not open-ended reasoning — Haiku is fast enough for that and
+    // doesn't think unless asked, so there's no thinking/effort param to set
+    // (effort isn't supported on this model; omitting `thinking` is its
+    // "off" state).
+    model: 'claude-haiku-4-5',
     max_tokens: 500,
-    // This is a bounded classification/retrieval task grounded in the fixed
-    // call script (not open-ended reasoning), and it's on the critical path
-    // of a live call — skip extended thinking and keep effort low so a
-    // suggestion comes back in a second or two, not several.
-    thinking: { type: 'disabled' },
-    output_config: { effort: 'low' },
     system: [
       {
         type: 'text',
         text: buildSystemPrompt(callType),
         // The script text is identical on every request for a given call
-        // type — cache it so repeat requests only pay for the (short)
-        // rolling transcript instead of reprocessing the whole script.
+        // type, so mark it cacheable. Note: Haiku 4.5's minimum cacheable
+        // prefix is 4096 tokens, and a single call type's script usually
+        // runs under that, so this may not actually hit cache today — left
+        // in since it's free and starts paying off if the scripts grow.
         cache_control: { type: 'ephemeral' }
       }
     ],
