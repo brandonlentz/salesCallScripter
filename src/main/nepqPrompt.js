@@ -38,12 +38,15 @@ Respond with ONLY a JSON object, no prose, no markdown fences, matching this sha
 
 {
   "stage": one of ${JSON.stringify(stageIds)},
-  "stageRationale": "one short sentence on why the call is at this stage right now",
+  "stageRationale": "under 10 words on why the call is at this stage right now",
   "suggestions": [
     { "type": "question" | "response", "text": "..." }
   ]
 }
 
-Give 2-4 suggestions: the next lines the rep should say, pulled from or closely adapted from \
-the script's current and next stage. Keep each suggestion to one or two sentences.`
+Give exactly 2-3 suggestions: the next lines the rep should say. Each "text" is ONE sentence, \
+under 25 words — even when the script's line for this beat runs longer, give only its next \
+sentence, not the whole block; trust the rep to keep reading from there. This is a hard limit: \
+the response must fit in a small token budget, so never quote a multi-sentence script passage \
+into a single suggestion.`
 }

@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { buildSystemPrompt } from './nepqPrompt.js'
 import { CALL_TYPES, getStageIds } from '../shared/callScripts.js'
 
+const MAX_TOKENS = 700
+
 let client = null
 
 function getClient() {
@@ -38,7 +40,10 @@ export async function getSuggestions(transcriptText, callType) {
     // (effort isn't supported on this model; omitting `thinking` is its
     // "off" state).
     model: 'claude-haiku-4-5',
-    max_tokens: 500,
+    // Headroom above what 2-3 short suggestions should need (see
+    // nepqPrompt.js) — the prompt enforces brevity, this is a backstop so a
+    // stray verbose response gets a clear error instead of truncated JSON.
+    max_tokens: MAX_TOKENS,
     system: [
       {
         type: 'text',
@@ -64,6 +69,12 @@ export async function getSuggestions(transcriptText, callType) {
     .map((block) => block.text)
     .join('')
     .trim()
+
+  if (message.stop_reason === 'max_tokens') {
+    throw new Error(
+      `Suggestion engine response was cut off (hit the ${MAX_TOKENS}-token limit) before finishing.`
+    )
+  }
 
   return parseSuggestionResponse(raw, callType)
 }
