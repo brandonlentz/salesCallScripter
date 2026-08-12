@@ -1,0 +1,28 @@
+{
+  "name": "sales-call-scripter",
+  "version": "0.1.0",
+  "description": "AI-powered sales teleprompter built on the NEPQ framework",
+  "main": "./out/main/index.js",
+  "author": "Brandon Lentz",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "dotenv": "^17.4.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "electron": "^43.4.0",
+    "electron-vite": "^5.0.0",
+    "vite": "^7.3.6"
+  }
+}
