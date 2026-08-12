@@ -8,7 +8,8 @@ const api = {
   suggestions: {
     // Additional bridge methods (system-audio capture control, etc.) will be
     // added here as the live-call pipeline lands.
-    get: (transcriptText) => ipcRenderer.invoke('suggestions:get', transcriptText)
+    get: (transcriptText, callType) =>
+      ipcRenderer.invoke('suggestions:get', { transcriptText, callType })
   }
 }
 

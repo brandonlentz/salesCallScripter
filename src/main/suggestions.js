@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { NEPQ_SYSTEM_PROMPT } from './nepqPrompt.js'
-import { NEPQ_STAGE_IDS } from '../shared/nepqStages.js'
+import { buildSystemPrompt } from './nepqPrompt.js'
+import { CALL_TYPES, getStageIds } from '../shared/callScripts.js'
 
 let client = null
 
@@ -14,9 +14,14 @@ function getClient() {
   return client
 }
 
-// Given the rolling transcript text of a call (live or replayed in Training
-// Mode), ask Claude which NEPQ stage the call is in and what to say/ask next.
-export async function getSuggestions(transcriptText) {
+// Given the call type and the rolling transcript text of a call (live or
+// replayed in Training Mode), ask Claude which stage of that call's script
+// the call is in and which lines from the script to surface next.
+export async function getSuggestions(transcriptText, callType) {
+  if (!CALL_TYPES.includes(callType)) {
+    throw new Error(`Unknown call type: ${callType}`)
+  }
+
   const anthropic = getClient()
   if (!anthropic) {
     throw new Error(
@@ -27,7 +32,7 @@ export async function getSuggestions(transcriptText) {
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 500,
-    system: NEPQ_SYSTEM_PROMPT,
+    system: buildSystemPrompt(callType),
     messages: [
       {
         role: 'user',
@@ -42,10 +47,10 @@ export async function getSuggestions(transcriptText) {
     .join('')
     .trim()
 
-  return parseSuggestionResponse(raw)
+  return parseSuggestionResponse(raw, callType)
 }
 
-function parseSuggestionResponse(raw) {
+function parseSuggestionResponse(raw, callType) {
   // Claude is instructed to return bare JSON, but strip markdown fences
   // defensively in case it wraps the response anyway.
   const cleaned = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
@@ -57,7 +62,7 @@ function parseSuggestionResponse(raw) {
     throw new Error(`Suggestion engine returned unparseable output: ${raw.slice(0, 200)}`)
   }
 
-  if (!NEPQ_STAGE_IDS.includes(parsed.stage)) {
+  if (!getStageIds(callType).includes(parsed.stage)) {
     throw new Error(`Suggestion engine returned an unknown stage: ${parsed.stage}`)
   }
 

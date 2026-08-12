@@ -7,7 +7,7 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 2500
 // the NEPQ suggestion engine can be tested without making a real call or
 // wiring up live audio. Same engine, same IPC calls the live-call pipeline
 // will use later — only the source of the transcript text differs.
-export default function TrainingPanel({ onTranscriptChange, onSuggestions }) {
+export default function TrainingPanel({ callType, onCallTypeChange, onTranscriptChange, onSuggestions }) {
   const [transcripts, setTranscripts] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [lines, setLines] = useState([])
@@ -67,6 +67,14 @@ export default function TrainingPanel({ onTranscriptChange, onSuggestions }) {
     setLoadError('')
 
     if (!id) return
+
+    // Transcript categories (intro/offer) map directly onto call types, so
+    // keep the suggestion engine's script in sync with whichever transcript
+    // is loaded.
+    const transcript = transcripts.find((t) => t.id === id)
+    if (transcript && transcript.category !== callType) {
+      onCallTypeChange(transcript.category)
+    }
 
     try {
       const text = await window.api.training.loadTranscript(id)

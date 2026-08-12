@@ -45,7 +45,9 @@ function createWindow() {
 function registerIpcHandlers() {
   ipcMain.handle('training:list-transcripts', () => listTranscripts(appRootDir))
   ipcMain.handle('training:load-transcript', (_event, id) => loadTranscript(appRootDir, id))
-  ipcMain.handle('suggestions:get', (_event, transcriptText) => getSuggestions(transcriptText))
+  ipcMain.handle('suggestions:get', (_event, { transcriptText, callType }) =>
+    getSuggestions(transcriptText, callType)
+  )
 }
 
 app.whenReady().then(() => {
