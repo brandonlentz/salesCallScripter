@@ -10,9 +10,9 @@ const api = {
       ipcRenderer.invoke('suggestions:get', { transcriptText, callType })
   },
   liveCall: {
-    start: () => ipcRenderer.invoke('live-call:start'),
+    start: (channels) => ipcRenderer.invoke('live-call:start', { channels }),
     stop: () => ipcRenderer.invoke('live-call:stop'),
-    sendAudioChunk: (chunk) => ipcRenderer.send('live-call:audio-chunk', chunk),
+    sendAudioChunk: (channel, chunk) => ipcRenderer.send('live-call:audio-chunk', { channel, chunk }),
     onTranscript: (callback) => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('live-call:transcript', listener)
