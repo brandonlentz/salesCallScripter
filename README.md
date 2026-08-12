@@ -23,7 +23,7 @@ Guides you in real-time through a sales call — listening to the conversation c
 - **React + Vite** (via `electron-vite`) — renderer UI
 - **BlackHole** — system audio capture (not yet wired up)
 - **Web Speech API** — speech-to-text (not yet wired up)
-- **Claude API** — real-time NEPQ suggestions (not yet wired up)
+- **Claude API** — real-time NEPQ suggestions
 
 ## Getting Started
 
@@ -31,8 +31,9 @@ Guides you in real-time through a sales call — listening to the conversation c
 
 - **macOS** (the app targets the desktop Electron shell + BlackHole for system audio)
 - **Node.js 18+** and npm (comes with Node) — check with `node -v`
+- An **Anthropic API key** — get one at https://console.anthropic.com/settings/keys
 - [**BlackHole**](https://existential.audio/blackhole/) — only needed once system-audio capture
-  is wired up; not required to run the current scaffold
+  is wired up; not required to run the current scaffold or Training Mode
 
 ### Install
 
@@ -40,6 +41,7 @@ Guides you in real-time through a sales call — listening to the conversation c
 git clone https://github.com/brandonlentz/salesCallScripter.git
 cd salesCallScripter
 npm install
+cp .env.example .env   # then add your ANTHROPIC_API_KEY
 ```
 
 ### Run in dev mode
@@ -49,9 +51,28 @@ npm run dev
 ```
 
 This starts the Vite dev server and launches the Electron app pointed at it, with hot reload
-on the renderer. Currently the window shows a stage tracker for the 8 NEPQ stages and
-placeholder panels for the live transcript and suggestion feed — audio capture, STT, and
-Claude-powered suggestions haven't been wired up yet.
+on the renderer.
+
+## Training Mode
+
+Since there's no live-call audio pipeline yet, the app can replay any saved transcript from
+`transcripts/intro/` or `transcripts/offer/` line by line to simulate a live call. This runs
+through the exact same suggestion engine a real call will use — only the transcript source
+differs — so it's the place to test and tune NEPQ stage detection and suggestion quality.
+
+In the running app:
+
+1. Pick a transcript from the **Training Mode** dropdown at the bottom of the window.
+2. Use **Play** to auto-advance line by line (adjust speed with the slider), or **Step** to
+   advance one line at a time for finer control. **Reset** starts the transcript over.
+3. Click **Get Suggestions Now** at any point to send the transcript-so-far to Claude and see
+   the detected NEPQ stage (highlighted in the tracker at the top) and suggested next
+   questions/responses. Check **Auto-request suggestions** to have this happen automatically
+   as the call plays — note this calls the Claude API on every update, so it costs more than
+   requesting manually.
+
+Requires `ANTHROPIC_API_KEY` to be set in `.env` (see Prerequisites above) — without it,
+requesting suggestions shows a clear error instead of a suggestion.
 
 ### Build a production bundle
 
