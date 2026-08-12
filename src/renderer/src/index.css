@@ -57,6 +57,29 @@ body {
   align-self: flex-end;
 }
 
+.mode-toggle {
+  display: flex;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  overflow: hidden;
+  align-self: flex-end;
+}
+
+.mode-toggle button {
+  background: #1c1f25;
+  color: #9a9fa6;
+  border: none;
+  border-radius: 0;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.mode-toggle button.is-active {
+  background: #3b82f6;
+  color: #fff;
+}
+
 .stage-tracker {
   display: flex;
   flex-wrap: wrap;

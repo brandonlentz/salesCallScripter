@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import { listTranscripts, loadTranscript } from './trainingTranscripts.js'
 import { getSuggestions } from './suggestions.js'
+import { registerLiveCallHandlers } from './liveCall.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -12,8 +13,10 @@ loadEnv({ path: join(appRootDir, '.env'), quiet: true })
 
 const isDev = !app.isPackaged
 
+let mainWindow = null
+
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
     show: false,
@@ -48,6 +51,7 @@ function registerIpcHandlers() {
   ipcMain.handle('suggestions:get', (_event, { transcriptText, callType }) =>
     getSuggestions(transcriptText, callType)
   )
+  registerLiveCallHandlers(() => mainWindow)
 }
 
 app.whenReady().then(() => {

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { CALL_TYPES, getStages } from '../../shared/callScripts.js'
 import TrainingPanel from './TrainingPanel'
+import LiveCallPanel from './LiveCallPanel'
 import ScriptPanel from './ScriptPanel'
 
 const initialSuggestionState = {
@@ -12,6 +13,7 @@ const initialSuggestionState = {
 }
 
 function App() {
+  const [mode, setMode] = useState('training') // 'training' | 'live'
   const [callType, setCallType] = useState('intro')
   const [transcriptText, setTranscriptText] = useState('')
   const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
@@ -39,6 +41,13 @@ function App() {
     setSuggestionState(initialSuggestionState)
   }
 
+  function handleModeChange(next) {
+    if (next === mode) return
+    setMode(next)
+    setTranscriptText('')
+    setSuggestionState(initialSuggestionState)
+  }
+
   const stages = getStages(callType)
   const activeStage = suggestionState.stage ?? stages[0].id
 
@@ -50,6 +59,22 @@ function App() {
           <p className="app__subtitle">NEPQ live-call teleprompter</p>
         </div>
         <div className="app__header-controls">
+          <div className="mode-toggle">
+            <button
+              type="button"
+              className={mode === 'training' ? 'is-active' : ''}
+              onClick={() => handleModeChange('training')}
+            >
+              Training
+            </button>
+            <button
+              type="button"
+              className={mode === 'live' ? 'is-active' : ''}
+              onClick={() => handleModeChange('live')}
+            >
+              Live Call
+            </button>
+          </div>
           <label className="field field--inline">
             <span>Call type</span>
             <select value={callType} onChange={(e) => handleCallTypeChange(e.target.value)}>
@@ -84,8 +109,7 @@ function App() {
             <pre className="panel__transcript">{transcriptText}</pre>
           ) : (
             <p className="panel__placeholder">
-              Nothing yet. Load a transcript in Training Mode below, or, once wired up, start a
-              live call.
+              Nothing yet. {mode === 'training' ? 'Load a transcript' : 'Start a call'} below.
             </p>
           )}
         </section>
@@ -98,8 +122,8 @@ function App() {
             !suggestionState.error &&
             suggestionState.suggestions.length === 0 && (
               <p className="panel__placeholder">
-                No suggestions yet. Play a transcript in Training Mode or click &ldquo;Get
-                Suggestions Now&rdquo;.
+                No suggestions yet. {mode === 'training' ? 'Play a transcript' : 'Start a call'} or
+                click &ldquo;Get Suggestions Now&rdquo;.
               </p>
             )}
           {suggestionState.stageRationale && (
@@ -115,12 +139,16 @@ function App() {
         </section>
       </main>
 
-      <TrainingPanel
-        callType={callType}
-        onCallTypeChange={handleCallTypeChange}
-        onTranscriptChange={setTranscriptText}
-        onSuggestions={requestSuggestions}
-      />
+      {mode === 'training' ? (
+        <TrainingPanel
+          callType={callType}
+          onCallTypeChange={handleCallTypeChange}
+          onTranscriptChange={setTranscriptText}
+          onSuggestions={requestSuggestions}
+        />
+      ) : (
+        <LiveCallPanel onTranscriptChange={setTranscriptText} onSuggestions={requestSuggestions} />
+      )}
 
       <ScriptPanel
         open={scriptOpen}

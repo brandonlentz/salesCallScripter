@@ -6,10 +6,23 @@ const api = {
     loadTranscript: (id) => ipcRenderer.invoke('training:load-transcript', id)
   },
   suggestions: {
-    // Additional bridge methods (system-audio capture control, etc.) will be
-    // added here as the live-call pipeline lands.
     get: (transcriptText, callType) =>
       ipcRenderer.invoke('suggestions:get', { transcriptText, callType })
+  },
+  liveCall: {
+    start: () => ipcRenderer.invoke('live-call:start'),
+    stop: () => ipcRenderer.invoke('live-call:stop'),
+    sendAudioChunk: (chunk) => ipcRenderer.send('live-call:audio-chunk', chunk),
+    onTranscript: (callback) => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('live-call:transcript', listener)
+      return () => ipcRenderer.removeListener('live-call:transcript', listener)
+    },
+    onError: (callback) => {
+      const listener = (_event, message) => callback(message)
+      ipcRenderer.on('live-call:error', listener)
+      return () => ipcRenderer.removeListener('live-call:error', listener)
+    }
   }
 }
 
