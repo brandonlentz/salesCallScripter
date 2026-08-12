@@ -23,6 +23,8 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
   const [devices, setDevices] = useState([])
   const [micDeviceId, setMicDeviceId] = useState(NO_DEVICE)
   const [callerDeviceId, setCallerDeviceId] = useState(NO_DEVICE)
+  const [outputDevices, setOutputDevices] = useState([])
+  const [monitorDeviceId, setMonitorDeviceId] = useState(NO_DEVICE)
 
   const recordersRef = useRef({}) // channel -> MediaRecorder
   const streamsRef = useRef({}) // channel -> MediaStream
@@ -30,6 +32,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
   const swappedRef = useRef(false)
   const debounceRef = useRef(null)
   const unsubscribeRef = useRef([])
+  const monitorAudioRef = useRef(null) // plays caller audio back out to a real speaker/headset
 
   const dualStreamMode = callerDeviceId !== NO_DEVICE && callerDeviceId !== micDeviceId
 
@@ -47,15 +50,22 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
       } catch {
         // Permission denied — device list will just show blank labels below.
       }
-      const list = (await navigator.mediaDevices.enumerateDevices()).filter(
-        (d) => d.kind === 'audioinput'
-      )
+      const all = await navigator.mediaDevices.enumerateDevices()
+      const list = all.filter((d) => d.kind === 'audioinput')
       setDevices(list)
 
       const blackhole = list.find((d) => /blackhole/i.test(d.label))
       const builtIn = list.find((d) => /macbook|built-in/i.test(d.label))
       setMicDeviceId(builtIn?.deviceId ?? list[0]?.deviceId ?? NO_DEVICE)
       if (blackhole) setCallerDeviceId(blackhole.deviceId)
+
+      // Monitor output: where we play the captured caller audio back out so
+      // you can actually hear them (system output should be set to
+      // BlackHole alone during calls, which has no speaker of its own).
+      const outputs = all.filter((d) => d.kind === 'audiooutput')
+      setOutputDevices(outputs)
+      const headset = outputs.find((d) => !/blackhole|macbook|built-in/i.test(d.label))
+      setMonitorDeviceId(headset?.deviceId ?? outputs[0]?.deviceId ?? NO_DEVICE)
     }
     loadDevices()
   }, [])
@@ -112,6 +122,30 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
     recordersRef.current[channel] = recorder
   }
 
+  // Dual-stream mode: BlackHole (or whatever's selected as Caller audio) has
+  // no speaker of its own, so play the same stream we're capturing back out
+  // to a real output device — that's how you actually hear the caller.
+  async function startMonitor(stream) {
+    if (!stream || !monitorAudioRef.current) return
+    const audio = monitorAudioRef.current
+    audio.srcObject = stream
+    if (monitorDeviceId && typeof audio.setSinkId === 'function') {
+      try {
+        await audio.setSinkId(monitorDeviceId)
+      } catch (err) {
+        console.warn('Could not set monitor output device:', err)
+      }
+    }
+    await audio.play()
+  }
+
+  function stopMonitor() {
+    const audio = monitorAudioRef.current
+    if (!audio) return
+    audio.pause()
+    audio.srcObject = null
+  }
+
   async function start() {
     setError('')
     setStatus('connecting')
@@ -131,6 +165,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
       if (dualStreamMode) {
         await openStream('rep', micDeviceId)
         await openStream('prospect', callerDeviceId)
+        await startMonitor(streamsRef.current.prospect)
       } else {
         await openStream('mixed', micDeviceId)
       }
@@ -139,6 +174,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
       Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
       recordersRef.current = {}
       streamsRef.current = {}
+      stopMonitor()
       await window.api.liveCall.stop()
       setError(`Could not open audio device: ${err.message}`)
       setStatus('error')
@@ -171,6 +207,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
     Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
     recordersRef.current = {}
     streamsRef.current = {}
+    stopMonitor()
     clearTimeout(debounceRef.current)
     unsubscribeRef.current.forEach((off) => off())
     unsubscribeRef.current = []
@@ -195,6 +232,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
     return () => {
       Object.values(recordersRef.current).forEach((r) => r.stop())
       Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
+      stopMonitor()
       unsubscribeRef.current.forEach((off) => off())
     }
   }, [])
@@ -236,11 +274,35 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
         </select>
       </label>
 
+      {dualStreamMode && (
+        <label className="field">
+          <span>Monitor output (hear the caller)</span>
+          <select
+            value={monitorDeviceId}
+            onChange={(e) => setMonitorDeviceId(e.target.value)}
+            disabled={status !== 'idle'}
+          >
+            {outputDevices.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || d.deviceId}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- live monitor relay, not user media */}
+      <audio ref={monitorAudioRef} hidden />
+
       <p className="panel__hint">
         {dualStreamMode ? (
           <>
             Dual-stream mode: your mic and the caller audio device are captured separately, so
-            speaker labels are exact.
+            speaker labels are exact. Your Mac&apos;s <strong>system output</strong> should be set
+            to Caller audio&apos;s device alone (e.g. BlackHole 2ch) during calls — the app plays
+            that stream back out to Monitor output above so you can hear them. Don&apos;t use a
+            Multi-Output Device for this; some call apps (including the Phone app) silently ignore
+            aggregate output devices.
           </>
         ) : blackholeAvailable ? (
           <>
@@ -249,10 +311,10 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
           </>
         ) : (
           <>
-            BlackHole not detected (install it, route the Phone app's output through it via a
-            Multi-Output Device, then reboot). Falling back to single-mic mode: keep the call on
-            speaker, not headphones, so the mic picks up both sides. Speaker labels are a guess
-            (first to talk = &ldquo;You&rdquo;) — use Swap if it&apos;s backwards.
+            BlackHole not detected (install it, set it as your system output alone during calls —
+            not via a Multi-Output Device, then reboot). Falling back to single-mic mode: keep the
+            call on speaker, not headphones, so the mic picks up both sides. Speaker labels are a
+            guess (first to talk = &ldquo;You&rdquo;) — use Swap if it&apos;s backwards.
           </>
         )}
       </p>

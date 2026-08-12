@@ -111,18 +111,23 @@ guessing which speaker is which. One-time setup:
 
 1. Install [**BlackHole 2ch**](https://existential.audio/blackhole/) (`brew install --cask
    blackhole-2ch`), then **reboot** — the driver won't be recognized until you do.
-2. Open **Audio MIDI Setup** (Spotlight → "Audio MIDI Setup"), click **+** → **Create Multi-Output
-   Device**, and check both your normal output (e.g. MacBook Pro Speakers) and **BlackHole 2ch**.
-   This lets you still hear the call while it's also captured.
-3. During calls, set this Multi-Output Device as your Mac's audio output (Control Center or
-   System Settings → Sound → Output). The Phone app doesn't have its own device picker, so this
-   has to be the system output while you're on a call.
-4. In the Live Call panel, set **Caller audio** to the **BlackHole 2ch** device (auto-selected if
-   found) and **Your mic** to your real microphone. The panel will confirm it's in dual-stream
-   mode.
+2. During calls, set **BlackHole 2ch alone** as your Mac's audio output (Control Center or System
+   Settings → Sound → Output). The Phone app doesn't have its own device picker, so this has to be
+   the system output while you're on a call.
 
-Note: routing system output through the Multi-Output Device affects *all* system sound, not
-just calls — you'll probably want to switch back to normal output when you're not on a call.
+   **Don't use a Multi-Output Device here.** It's the obvious way to also hear the call live
+   while capturing it, but real-time call apps — including the macOS Phone app — appear to
+   silently reject aggregate/Multi-Output output devices (likely because they need a real
+   hardware device for voice processing) and fall back to the built-in speakers instead, so
+   nothing reaches BlackHole. A plain, non-aggregate device like BlackHole 2ch alone works fine.
+3. In the Live Call panel, set **Caller audio** to the **BlackHole 2ch** device (auto-selected if
+   found) and **Your mic** to your real microphone. Since BlackHole has no speaker, the app plays
+   the captured caller audio back out to whatever you pick as **Monitor output** (e.g. your
+   headset) — that's how you actually hear them. The panel will confirm it's in dual-stream mode.
+
+Note: setting BlackHole 2ch as system output affects *all* system sound (you'll only hear
+anything that the app relays through Monitor output), so switch back to your normal output when
+you're not on a call.
 
 ### Using it
 
