@@ -29,19 +29,19 @@ script rather than inventing new phrasing.
 
 - **Electron** — macOS desktop shell
 - **React + Vite** (via `electron-vite`) — renderer UI
-- **BlackHole** — system audio capture (not yet wired up)
-- **Web Speech API** — speech-to-text (not yet wired up)
+- **Deepgram** — live speech-to-text with speaker diarization
 - **Claude API** — real-time suggestion engine, grounded in the call scripts above
 
 ## Getting Started
 
 ### Prerequisites
 
-- **macOS** (the app targets the desktop Electron shell + BlackHole for system audio)
+- **macOS**, with calls placed through the built-in **Phone app** (Continuity Calling from an
+  iPhone) so the call audio plays through the Mac
 - **Node.js 18+** and npm (comes with Node) — check with `node -v`
 - An **Anthropic API key** — get one at https://console.anthropic.com/settings/keys
-- [**BlackHole**](https://existential.audio/blackhole/) — only needed once system-audio capture
-  is wired up; not required to run the current scaffold or Training Mode
+- A **Deepgram API key** (for live calls only, not Training Mode) — get one at
+  https://console.deepgram.com/
 
 ### Install
 
@@ -49,7 +49,7 @@ script rather than inventing new phrasing.
 git clone https://github.com/brandonlentz/salesCallScripter.git
 cd salesCallScripter
 npm install
-cp .env.example .env   # then add your ANTHROPIC_API_KEY
+cp .env.example .env   # then add ANTHROPIC_API_KEY and DEEPGRAM_API_KEY
 ```
 
 ### Run in dev mode
@@ -81,20 +81,41 @@ since they contain customer PII.
 
 ## Using the app
 
-- **Call type** selector (top right) picks which script drives the stage tracker and
-  suggestion engine — Intro, Offer, or Associate.
+- **Training / Live Call** toggle (top right) switches between replaying a saved transcript and
+  an actual live call.
+- **Call type** selector picks which script drives the stage tracker and suggestion engine —
+  Intro, Offer, or Associate.
 - **Script** button opens a drawer with the full word-for-word script for the current call
   type, auto-scrolled to whichever stage the suggestion engine thinks the call is in.
 - **Stage tracker** (below the header) highlights the current stage of that script.
 - **Live Transcript** / **Suggested Next Lines** panels show the call so far and the engine's
   suggested next lines, pulled from the script.
 
+## Live Call
+
+1. Dial out through the macOS **Phone app**, with the call on **speaker** — not headphones or
+   AirPods. Audio capture is a single built-in-mic stream; with the call on speaker, the mic
+   naturally picks up both your voice and the prospect's, and Deepgram's diarization splits it
+   back into two speakers. (No BlackHole or virtual audio device needed.)
+2. Switch to **Live Call** mode, pick the right **Call type**, and click **Start Call**. macOS
+   will prompt for microphone access the first time.
+3. As the call plays out, transcribed lines appear labeled **You** / **Them** — whoever speaks
+   first is assumed to be you. If that guess is backwards, click **Swap Speakers** to relabel
+   the whole transcript so far (and everything after).
+4. Suggestions auto-request after the prospect speaks (toggle this off if you'd rather trigger
+   them manually with **Get Suggestions Now** — each request calls the Claude API).
+5. **End Call** stops the mic and closes the Deepgram connection. **Clear** resets the
+   transcript before your next call.
+
+Requires `DEEPGRAM_API_KEY` in `.env` — without it, **Start Call** shows a clear error instead
+of connecting.
+
 ## Training Mode
 
-Since there's no live-call audio pipeline yet, the app can replay any saved transcript from
-`transcripts/intro/` or `transcripts/offer/` line by line to simulate a live call. This runs
-through the exact same suggestion engine a real call will use — only the transcript source
-differs — so it's the place to test and tune stage detection and suggestion quality.
+The app can also replay any saved transcript from `transcripts/intro/` or `transcripts/offer/`
+line by line to simulate a live call, without needing a real call or microphone. It runs
+through the exact same suggestion engine live calls use — only the transcript source differs —
+so it's the place to test and tune stage detection and suggestion quality.
 
 In the running app:
 
@@ -103,13 +124,12 @@ In the running app:
 2. Use **Play** to auto-advance line by line (adjust speed with the slider), or **Step** to
    advance one line at a time for finer control. **Reset** starts the transcript over.
 3. Click **Get Suggestions Now** at any point to send the transcript-so-far to Claude and see
-   the detected stage (highlighted in the tracker and in the Script panel) and suggested next
-   lines. Check **Auto-request suggestions** to have this happen automatically as the call
-   plays — note this calls the Claude API on every update, so it costs more than requesting
-   manually.
+   the detected stage and suggested next lines. Check **Auto-request suggestions** to have this
+   happen automatically as the call plays — note this calls the Claude API on every update, so
+   it costs more than requesting manually.
 
 There are no saved transcripts for the Associate call type yet — switch to it manually with the
 call type selector to preview its script.
 
-Requires `ANTHROPIC_API_KEY` to be set in `.env` (see Prerequisites above) — without it,
-requesting suggestions shows a clear error instead of a suggestion.
+Requires `ANTHROPIC_API_KEY` to be set in `.env` — without it, requesting suggestions shows a
+clear error instead of a suggestion.
