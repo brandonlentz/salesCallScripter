@@ -27,18 +27,46 @@ Guides you in real-time through a sales call — listening to the conversation c
 
 ## Getting Started
 
+### Prerequisites
+
+- **macOS** (the app targets the desktop Electron shell + BlackHole for system audio)
+- **Node.js 18+** and npm (comes with Node) — check with `node -v`
+- [**BlackHole**](https://existential.audio/blackhole/) — only needed once system-audio capture
+  is wired up; not required to run the current scaffold
+
+### Install
+
 ```bash
+git clone https://github.com/brandonlentz/salesCallScripter.git
+cd salesCallScripter
 npm install
+```
+
+### Run in dev mode
+
+```bash
 npm run dev
 ```
 
-This launches the Electron app with the React renderer in dev mode. Currently the window
-shows a stage tracker for the 8 NEPQ stages and placeholder panels for the live transcript
-and suggestion feed — audio capture, STT, and Claude-powered suggestions haven't been wired
-up yet.
+This starts the Vite dev server and launches the Electron app pointed at it, with hot reload
+on the renderer. Currently the window shows a stage tracker for the 8 NEPQ stages and
+placeholder panels for the live transcript and suggestion feed — audio capture, STT, and
+Claude-powered suggestions haven't been wired up yet.
 
-To build a production bundle:
+### Build a production bundle
 
 ```bash
 npm run build
 ```
+
+Output goes to `out/`. Run the built app with:
+
+```bash
+npm run preview
+```
+
+### Local-only data
+
+`transcripts/` and `data/` are gitignored — they're meant to hold real seller call
+transcripts and related data locally for development/reference, and shouldn't be committed
+since they contain customer PII.
