@@ -2,5 +2,10 @@ node_modules/
 .env
 .env.local
 dist/
+out/
 .DS_Store
 *.log
+
+# Real call transcripts and seller data contain customer PII — keep local only.
+transcripts/
+data/
