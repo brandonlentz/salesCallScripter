@@ -51,6 +51,16 @@ function App() {
     setSuggestionState(initialSuggestionState)
   }
 
+  // Click-to-call: select the property as call context and jump straight
+  // to Live Call mode, since that's the obvious next screen once you've
+  // dialed. Dialing itself (and picking the call type) is handled in
+  // PropertyPanel/LiveCallPanel.
+  function handleCall(property) {
+    setSelectedProperty(property)
+    handleModeChange('live')
+    setPropertyOpen(false)
+  }
+
   const stages = getStages(callType)
   const activeStage = suggestionState.stage ?? stages[0].id
 
@@ -177,6 +187,7 @@ function App() {
           setPropertyOpen(false)
         }}
         onClear={() => setSelectedProperty(null)}
+        onCall={handleCall}
       />
     </div>
   )

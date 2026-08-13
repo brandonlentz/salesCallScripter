@@ -31,9 +31,10 @@ const PROPERTY_SCHEMA = {
   additionalProperties: false
 }
 
-const SYSTEM_PROMPT = `You extract property/lead details from raw text a user pasted from their \
-real estate CRM (REISift). The text may be messy — page chrome, button labels, timestamps, \
-unrelated boilerplate — pull out only real values for these fields:
+const SYSTEM_PROMPT = `You extract property/lead details from content a user pasted from their \
+real estate CRM (REISift) — either the page's visible text, or its full HTML markup (tags, \
+attributes, and all). Either way it'll be messy — page chrome, button labels, timestamps, \
+script/style leftovers, unrelated boilerplate — pull out only real values for these fields:
 
 - label: a short name for this case — the deceased owner's name + " Estate", or the property \
 street address if no owner name is present
@@ -60,6 +61,18 @@ function getClient() {
   return client
 }
 
+// If what was pasted is HTML (full-page copy, e.g. DevTools "Copy
+// outerHTML"), strip the two tag types that are pure noise for extraction
+// purposes — inline JS bundles and CSS can be enormous and add nothing —
+// so the token budget goes toward actual page content. No-op on plain
+// text: there's nothing for these patterns to match.
+function stripHtmlNoise(text) {
+  return text
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+}
+
 // Parses raw text copied from REISift into a property draft matching
 // PROPERTY_FIELDS. Caller (PropertyPanel.jsx) merges the result into the
 // form for the user to review/correct before saving — this is a
@@ -73,14 +86,18 @@ export async function parsePropertyText(rawText) {
     throw new Error('Paste some text first.')
   }
 
+  const cleaned = stripHtmlNoise(rawText.trim())
+
   const message = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
     max_tokens: 800,
     system: SYSTEM_PROMPT,
     output_config: { format: { type: 'json_schema', schema: PROPERTY_SCHEMA } },
-    // Generous cap — a REISift page's visible text is a few thousand
-    // characters at most; this just guards against pasting something huge.
-    messages: [{ role: 'user', content: rawText.trim().slice(0, 20000) }]
+    // Plain visible-text paste is a few thousand characters; a full-page
+    // HTML paste (markup, not scripts/styles — already stripped above) is
+    // bigger but still well within this. Just a guard against pasting
+    // something absurd, not a realistic ceiling for either input kind.
+    messages: [{ role: 'user', content: cleaned.slice(0, 150000) }]
   })
 
   const block = message.content.find((b) => b.type === 'text')

@@ -17,6 +17,9 @@ const api = {
     delete: (id) => ipcRenderer.invoke('properties:delete', id),
     parse: (rawText) => ipcRenderer.invoke('properties:parse', rawText)
   },
+  dialer: {
+    call: (phoneNumber) => ipcRenderer.invoke('dialer:call', phoneNumber)
+  },
   liveCall: {
     start: (channels, meta) => ipcRenderer.invoke('live-call:start', { channels, ...meta }),
     stop: (transcriptText) => ipcRenderer.invoke('live-call:stop', { transcriptText }),

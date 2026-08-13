@@ -107,16 +107,31 @@ configured from REISift's own Settings → Integrations page), and there's no wa
 open an authenticated REISift session to fetch a page by URL. So instead:
 
 1. Click **Property** in the header, then **+ New Property**.
-2. Copy the property/contact page's text from REISift (however messy — page chrome and all is
-   fine) and paste it into the **Paste from REISift** box, then click **Parse & Fill Fields**.
-   Claude extracts what it actually finds — deceased owner, property address, tax status, known
-   heirs, contact info, prior notes — into the fields below, leaving anything not present blank
-   rather than guessing. Review/correct before saving.
+2. Copy from REISift and paste it into the **Paste from REISift** box, then click **Parse & Fill
+   Fields**. Two ways to copy, and both work:
+   - **Select all the visible text** on the page (quick, works for most cases)
+   - **Full page HTML** (DevTools → right-click the `<html>` element → Copy → Copy outerHTML) —
+     slower to grab, but catches anything in a collapsed accordion or a tab you don't have open,
+     since that content still exists in the page's HTML even when it's not currently visible.
+     Plain text copy only grabs what's on screen.
+
+   Either way, Claude extracts what it actually finds — deceased owner, property address, tax
+   status, known heirs, contact info, prior notes — into the fields below, leaving anything not
+   present blank rather than guessing. Review/correct before saving.
 3. Before a call, click **Property** and search/select the right one — search matches on label,
    contact name, phone, or address. The selected property shows in the header and feeds every
    suggestion request (Training and Live Call both) until you clear or switch it.
 
 You can still fill the fields in by hand instead — the paste box is optional, just faster.
+
+### Click to call
+
+Any property with a phone number saved shows a **📞 Call** button — in the property list and next
+to the selected-property badge. Clicking it hands off to macOS's `tel:` handler (the Phone app /
+Continuity Dialer — the same app this whole live-call setup already routes audio through, so
+nothing new to configure) to actually place the call, selects that property as the call's
+context, and switches the app to Live Call mode. Since the call is dialed *from* that property's
+own record, the app already knows who you're calling — no caller-ID detection needed.
 
 Entries are stored locally (`src/main/properties.js`, Electron's userData dir — outside the repo,
 never committed, since they're seller PII) and are editable/deletable from the same drawer.

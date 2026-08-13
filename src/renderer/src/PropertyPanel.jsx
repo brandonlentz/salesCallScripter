@@ -25,7 +25,7 @@ const BLANK_DRAFT = {
 // doesn't expose a documented search/pull API. Search box + list here is
 // the same shape a future REISift sync would populate, so wiring that in
 // later shouldn't need UI changes.
-export default function PropertyPanel({ open, onClose, selected, onSelect, onClear }) {
+export default function PropertyPanel({ open, onClose, selected, onSelect, onClear, onCall }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [view, setView] = useState('list') // 'list' | 'form'
@@ -89,6 +89,16 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
     }
   }
 
+  // Dials via the OS (macOS's tel: handler — the Phone app) and hands the
+  // property off to App.jsx to select as call context + switch to Live
+  // Call mode. We already know who this number belongs to because we're
+  // the one placing the call, from this property's own record — no
+  // caller-ID lookup needed.
+  function handleCall(property) {
+    onCall(property)
+    window.api.dialer.call(property.contactPhone)
+  }
+
   async function handleDelete(id) {
     await window.api.properties.delete(id)
     if (selected?.id === id) onClear()
@@ -130,6 +140,11 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                     <strong>{selected.label}</strong>
                     {selected.propertyAddress && <span>{selected.propertyAddress}</span>}
                   </div>
+                  {selected.contactPhone && (
+                    <button type="button" onClick={() => handleCall(selected)}>
+                      📞 Call
+                    </button>
+                  )}
                   <button type="button" onClick={onClear}>
                     Clear
                   </button>
@@ -165,6 +180,11 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                           <span>{[p.contactName, p.propertyAddress].filter(Boolean).join(' — ')}</span>
                         )}
                       </button>
+                      {p.contactPhone && (
+                        <button type="button" onClick={() => handleCall(p)} title={`Call ${p.contactPhone}`}>
+                          📞 Call
+                        </button>
+                      )}
                       <button type="button" onClick={() => startEdit(p)}>
                         Edit
                       </button>
@@ -187,7 +207,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                     rows={4}
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
-                    placeholder="Copy the property/contact page's text from REISift and paste it here…"
+                    placeholder="Copy the property/contact page from REISift — visible text (select all) or full page HTML (DevTools → Copy outerHTML) both work — and paste it here…"
                   />
                 </label>
                 {parseError && <p className="panel__error">{parseError}</p>}
