@@ -94,10 +94,14 @@ const INTRO_SCRIPT = [
     title: 'Objections',
     lines: [
       `SCAM / WHO ARE YOU: "Totally fair — I work for Privates ID, a PI firm in D.C. I can text you our info at the end. Would it be a problem to speak for 2 minutes?"`,
-      `NOT INTERESTED: "I'm so sorry — I'm not even sure I can help. Are you getting a lot of these calls?"`,
+      `NOT INTERESTED: "Totally fair — before I let you go, can I ask what makes you say that?" [PAUSE. Let them answer — "not interested" this early is often really "I don't understand yet."] [MIRROR their reason back as a question, then keep listening.]`,
       `TAKING CARE OF IT: [MIRROR] "Taking care of it?" [curious tone] "How did it get to this point?"`,
       `WHAT IS THIS ABOUT: "A tax foreclosure lawsuit was filed. We wanted to see if family was aware, planned to take care of it, or might consider other options."`,
-      `CAN I DO THIS MYSELF: "Absolutely — most people need an attorney, genealogist, pay back taxes, and possibly file for probate. What's your sense of how likely that is?"`
+      `CAN I DO THIS MYSELF: "Absolutely — most people need an attorney, genealogist, pay back taxes, and possibly file for probate. What's your sense of how likely that is?"`,
+      `DON'T HAVE TIME / CALL ME LATER: "Totally understand — is there a better time today or tomorrow, or should I just text you the basics so you have it either way?"`,
+      `HOW DID YOU GET MY NUMBER: "Public records tied to the property — that's actually part of why I'm calling, so I wanted to be upfront about it." [PAUSE]`,
+      `CAN YOU JUST EMAIL/TEXT ME: "Happy to send something over after we talk for two minutes — that way what I send actually answers your questions instead of raising more."`,
+      `I DON'T KNOW ANYTHING ABOUT THAT: [MIRROR] "You don't know anything about it?" [curious tone, PAUSE] "That's actually really common — most people we talk to are hearing about this for the first time."`
     ]
   }
 ]
@@ -155,7 +159,11 @@ const OFFER_SCRIPT = [
       `THINK ABOUT IT: "How long do you need?" [QUIET] "What exactly do you have to figure out between now and then?"`,
       `SPOUSE: "As you talk with them, what do you think their main concern will be?" [They reveal real objection]`,
       `TOO LOW: "Given everything going on, what do you think would be a fair number?" [SHUT UP]`,
-      `SCAM: "[Seller], put yourself in my shoes — how do I know I'm paying the right person? That's why we use a licensed notary. [playful]"`
+      `SCAM: "[Seller], put yourself in my shoes — how do I know I'm paying the right person? That's why we use a licensed notary. [playful]"`,
+      `WANT TO GET IT APPRAISED / ANOTHER OPINION: "Makes sense — what would you want to see happen if that number came back different than mine?" [PAUSE — let them reveal their real bar]`,
+      `WHY IS IT SO LOW: "Fair question — the number reflects [condition/title issue/timeline], not a normal-sale appraisal. What were you expecting going in?"`,
+      `NEED TO TALK TO AN ATTORNEY: "Smart move, honestly — I'd want the same. Anything specific you want them to look at, or just a general gut check?"`,
+      `WHAT'S THE CATCH: [MIRROR] "What's the catch?" [pause] "Genuinely — no catch, that's why we walk through the whole process before the number. What part feels off?"`
     ]
   }
 ]
@@ -200,7 +208,9 @@ const ASSOCIATE_SCRIPT = [
     lines: [
       `WON'T SHARE INFO: "Totally understandable. Would it be a problem if I gave YOU my info to pass along?"`,
       `NOT INTERESTED: [MIRROR] "Not going to be interested?" [pause] "I understand — it's a legal filing. I'd feel bad not giving them a chance."`,
-      `SCAM: "Fair — I can text you our company info right now. Would that work?"`
+      `SCAM: "Fair — I can text you our company info right now. Would that work?"`,
+      `WHY DO YOU WANT THEIR INFO: "Totally fair to ask — it's related to a property [Deceased] left behind, and [Heir] is someone we believe should know about it."`,
+      `NOT SURE / HAVEN'T TALKED IN A WHILE: "That's okay — even just an old number or an email is a huge help, I can take it from there."`
     ]
   }
 ]
