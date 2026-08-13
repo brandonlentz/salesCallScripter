@@ -14,7 +14,8 @@ const api = {
     search: (query) => ipcRenderer.invoke('properties:search', query),
     save: (data) => ipcRenderer.invoke('properties:save', data),
     update: (id, data) => ipcRenderer.invoke('properties:update', { id, data }),
-    delete: (id) => ipcRenderer.invoke('properties:delete', id)
+    delete: (id) => ipcRenderer.invoke('properties:delete', id),
+    parse: (rawText) => ipcRenderer.invoke('properties:parse', rawText)
   },
   liveCall: {
     start: (channels, meta) => ipcRenderer.invoke('live-call:start', { channels, ...meta }),

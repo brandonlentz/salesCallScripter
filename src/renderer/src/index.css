@@ -437,6 +437,30 @@ body {
   gap: 0.75rem;
 }
 
+.property-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #2a2e35;
+}
+
+.property-paste button {
+  align-self: flex-start;
+  background: #22262d;
+  color: #f2f2f2;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.property-paste button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .property-form input,
 .property-form textarea {
   background: #14161a;

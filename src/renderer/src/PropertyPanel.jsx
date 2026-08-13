@@ -31,6 +31,9 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
   const [view, setView] = useState('list') // 'list' | 'form'
   const [draft, setDraft] = useState(BLANK_DRAFT)
   const [error, setError] = useState('')
+  const [pasteText, setPasteText] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState('')
 
   async function refresh(q) {
     setResults(await window.api.properties.search(q))
@@ -56,13 +59,34 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
   function startCreate() {
     setDraft(BLANK_DRAFT)
     setError('')
+    setPasteText('')
+    setParseError('')
     setView('form')
   }
 
   function startEdit(property) {
     setDraft(property)
     setError('')
+    setPasteText('')
+    setParseError('')
     setView('form')
+  }
+
+  async function handleParse() {
+    setParsing(true)
+    setParseError('')
+    try {
+      const parsed = await window.api.properties.parse(pasteText)
+      // Merge onto the current draft rather than replacing it outright —
+      // preserves the id when editing, and any field left blank in the
+      // pasted text (parser returns "" for those) still overwrites, which
+      // is the point: re-pasting fresher text should win.
+      setDraft((prev) => ({ ...prev, ...parsed }))
+    } catch (err) {
+      setParseError(err.message)
+    } finally {
+      setParsing(false)
+    }
   }
 
   async function handleDelete(id) {
@@ -155,6 +179,22 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
           ) : (
             <div className="property-form">
               {error && <p className="panel__error">{error}</p>}
+
+              <div className="property-paste">
+                <label className="field">
+                  <span>Paste from REISift (optional — fills in the fields below)</span>
+                  <textarea
+                    rows={4}
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder="Copy the property/contact page's text from REISift and paste it here…"
+                  />
+                </label>
+                {parseError && <p className="panel__error">{parseError}</p>}
+                <button type="button" onClick={handleParse} disabled={parsing || !pasteText.trim()}>
+                  {parsing ? 'Parsing…' : 'Parse & Fill Fields'}
+                </button>
+              </div>
 
               <label className="field">
                 <span>Label *</span>

@@ -11,6 +11,7 @@ import {
   updateProperty,
   deleteProperty
 } from './properties.js'
+import { parsePropertyText } from './parseProperty.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -63,6 +64,7 @@ function registerIpcHandlers() {
   ipcMain.handle('properties:save', (_event, data) => saveProperty(data))
   ipcMain.handle('properties:update', (_event, { id, data }) => updateProperty(id, data))
   ipcMain.handle('properties:delete', (_event, id) => deleteProperty(id))
+  ipcMain.handle('properties:parse', (_event, rawText) => parsePropertyText(rawText))
   registerLiveCallHandlers(() => mainWindow, appRootDir)
 }
 

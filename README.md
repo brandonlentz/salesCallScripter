@@ -101,16 +101,22 @@ Beyond the generic script, the suggestion engine can be grounded in specifics ab
 and contact for this call — deceased owner, tax/legal status, known heirs, prior contact notes,
 offer amount — pulled from your REISift records.
 
-**Current state: manual entry, not a live REISift sync.** REISift doesn't publish a documented
+**Current state: paste-and-parse, not a live REISift sync.** REISift doesn't publish a documented
 pull/search API for third-party apps, only a Zapier action and native outbound webhooks (both
-configured from REISift's own Settings → Integrations page). So for now:
+configured from REISift's own Settings → Integrations page), and there's no way for this app to
+open an authenticated REISift session to fetch a page by URL. So instead:
 
 1. Click **Property** in the header, then **+ New Property**.
-2. Copy the relevant details over from REISift (deceased owner, property address, tax status,
-   known heirs, prior contact notes, etc.) into the form and save.
+2. Copy the property/contact page's text from REISift (however messy — page chrome and all is
+   fine) and paste it into the **Paste from REISift** box, then click **Parse & Fill Fields**.
+   Claude extracts what it actually finds — deceased owner, property address, tax status, known
+   heirs, contact info, prior notes — into the fields below, leaving anything not present blank
+   rather than guessing. Review/correct before saving.
 3. Before a call, click **Property** and search/select the right one — search matches on label,
    contact name, phone, or address. The selected property shows in the header and feeds every
    suggestion request (Training and Live Call both) until you clear or switch it.
+
+You can still fill the fields in by hand instead — the paste box is optional, just faster.
 
 Entries are stored locally (`src/main/properties.js`, Electron's userData dir — outside the repo,
 never committed, since they're seller PII) and are editable/deletable from the same drawer.
