@@ -153,7 +153,12 @@ function App() {
           onSuggestions={requestSuggestions}
         />
       ) : (
-        <LiveCallPanel onTranscriptChange={setTranscriptText} onSuggestions={requestSuggestions} />
+        <LiveCallPanel
+          onTranscriptChange={setTranscriptText}
+          onSuggestions={requestSuggestions}
+          callType={callType}
+          property={selectedProperty}
+        />
       )}
 
       <ScriptPanel

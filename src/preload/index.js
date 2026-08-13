@@ -17,8 +17,8 @@ const api = {
     delete: (id) => ipcRenderer.invoke('properties:delete', id)
   },
   liveCall: {
-    start: (channels) => ipcRenderer.invoke('live-call:start', { channels }),
-    stop: () => ipcRenderer.invoke('live-call:stop'),
+    start: (channels, meta) => ipcRenderer.invoke('live-call:start', { channels, ...meta }),
+    stop: (transcriptText) => ipcRenderer.invoke('live-call:stop', { transcriptText }),
     sendAudioChunk: (channel, chunk) => ipcRenderer.send('live-call:audio-chunk', { channel, chunk }),
     onTranscript: (callback) => {
       const listener = (_event, payload) => callback(payload)

@@ -63,7 +63,7 @@ function registerIpcHandlers() {
   ipcMain.handle('properties:save', (_event, data) => saveProperty(data))
   ipcMain.handle('properties:update', (_event, { id, data }) => updateProperty(id, data))
   ipcMain.handle('properties:delete', (_event, id) => deleteProperty(id))
-  registerLiveCallHandlers(() => mainWindow)
+  registerLiveCallHandlers(() => mainWindow, appRootDir)
 }
 
 app.whenReady().then(() => {

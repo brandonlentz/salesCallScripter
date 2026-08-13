@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { connectDeepgram } from './deepgram.js'
+import { startRecording } from './recording.js'
 
 // Wires up live-call transcription. Supports one Deepgram connection per
 // named audio channel:
@@ -9,10 +10,15 @@ import { connectDeepgram } from './deepgram.js'
 //     from a BlackHole loopback device), each a dedicated single-speaker
 //     stream — no guessing needed, the channel IS the speaker
 // One call at a time, which matches how the app is actually used.
-export function registerLiveCallHandlers(getMainWindow) {
+//
+// Every call is also recorded to disk (see recording.js) — the same audio
+// chunks already flowing to Deepgram are appended to per-channel files as
+// they arrive, so this adds no extra IPC traffic.
+export function registerLiveCallHandlers(getMainWindow, appRootDir) {
   const connections = new Map()
+  let recording = null
 
-  ipcMain.handle('live-call:start', async (_event, { channels }) => {
+  ipcMain.handle('live-call:start', async (_event, { channels, callType, property }) => {
     const opened = []
     try {
       for (const channel of channels) {
@@ -38,14 +44,32 @@ export function registerLiveCallHandlers(getMainWindow) {
       }
       throw new Error(`Could not connect to Deepgram: ${err.message}`)
     }
+
+    // Best-effort: a recording failure shouldn't stop the call itself —
+    // transcription and coaching are already live — but the rep should
+    // know a call went unrecorded.
+    try {
+      recording = await startRecording(appRootDir, { callType, channels, property })
+    } catch (err) {
+      recording = null
+      getMainWindow()?.webContents.send('live-call:error', `Recording could not start: ${err.message}`)
+    }
   })
 
   ipcMain.on('live-call:audio-chunk', (_event, { channel, chunk }) => {
-    connections.get(channel)?.send(Buffer.from(chunk))
+    const buffer = Buffer.from(chunk)
+    connections.get(channel)?.send(buffer)
+    recording?.appendChunk(channel, buffer)
   })
 
-  ipcMain.handle('live-call:stop', () => {
+  ipcMain.handle('live-call:stop', async (_event, { transcriptText } = {}) => {
     for (const connection of connections.values()) connection.close()
     connections.clear()
+
+    if (recording) {
+      const activeRecording = recording
+      recording = null
+      await activeRecording.finish({ transcriptText })
+    }
   })
 }

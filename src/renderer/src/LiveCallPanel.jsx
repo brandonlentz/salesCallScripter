@@ -18,7 +18,7 @@ const NO_DEVICE = ''
 //   - Single-mic (fallback, works today with no extra setup): one mic
 //     stream picks up both voices acoustically (call on speaker), and
 //     Deepgram's diarization guesses which parts are you vs. the prospect.
-export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
+export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property }) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
@@ -159,7 +159,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
     const channels = dualStreamMode ? ['rep', 'prospect'] : ['mixed']
 
     try {
-      await window.api.liveCall.start(channels)
+      await window.api.liveCall.start(channels, { callType, property })
     } catch (err) {
       setError(err.message)
       setStatus('error')
@@ -180,7 +180,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
       recordersRef.current = {}
       streamsRef.current = {}
       stopMonitor()
-      await window.api.liveCall.stop()
+      await window.api.liveCall.stop(transcriptTextRef.current)
       setError(`Could not open audio device: ${err.message}`)
       setStatus('error')
       return
@@ -216,7 +216,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
     clearTimeout(debounceRef.current)
     unsubscribeRef.current.forEach((off) => off())
     unsubscribeRef.current = []
-    await window.api.liveCall.stop()
+    await window.api.liveCall.stop(transcriptTextRef.current)
     setStatus('idle')
     setInterimText('')
   }
@@ -369,6 +369,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions }) {
       {interimText && <p className="panel__hint">…{interimText}</p>}
       <p className="panel__hint">
         Status: {status}
+        {status === 'live' && ' · ● Recording'}
         {entries.length > 0 && ` · ${entries.length} lines`}
       </p>
     </section>

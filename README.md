@@ -76,9 +76,9 @@ npm run preview
 
 ### Local-only data
 
-`transcripts/` and `data/` are gitignored — they're meant to hold real seller call
-transcripts and related data locally for development/reference, and shouldn't be committed
-since they contain customer PII.
+`transcripts/`, `data/`, and `recordings/` are gitignored — they're meant to hold real seller
+call transcripts, audio recordings, and related data locally for development/reference, and
+shouldn't be committed since they contain customer PII.
 
 ## Using the app
 
@@ -176,6 +176,21 @@ you're not on a call.
    them manually with **Get Suggestions Now** — each request calls the Claude API).
 4. **End Call** stops the mic and closes the Deepgram connection(s). **Clear** resets the
    transcript before your next call.
+
+### Recordings
+
+Every live call is automatically recorded to `recordings/<call type>/<timestamp>[-property
+label]/` — one raw audio file per channel (`audio-mixed.webm` in single-mic mode,
+`audio-rep.webm` + `audio-prospect.webm` in dual-stream), `transcript.txt`, and `meta.json` (call
+type, matched property if one was selected, start/end time). The **● Recording** indicator next
+to the status line confirms it's active; if the recording itself fails to start (e.g. a disk
+issue), the call still proceeds — transcription and coaching aren't affected — but an error
+banner will say so, since that call went unrecorded.
+
+Like `transcripts/` and `data/`, this folder is gitignored and local-only (real seller PII plus
+call audio). **Check your state's call-recording consent law before relying on this** — Texas
+(where the calls in this app originate) is one-party consent, but if you're ever calling into or
+from a two-party consent state, that changes what's required.
 
 ### Suggestion latency
 

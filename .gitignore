@@ -9,3 +9,4 @@ out/
 # Real call transcripts and seller data contain customer PII — keep local only.
 transcripts/
 data/
+recordings/
