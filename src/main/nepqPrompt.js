@@ -65,11 +65,15 @@ export function buildPropertyContext(property) {
     if (value) lines.push(`${label}: ${value}`)
   }
 
-  field(
-    'Contact',
-    [property.contactName, property.contactRelationship].filter(Boolean).join(' — ')
-  )
-  field('Contact phone', property.contactPhone)
+  for (const contact of property.contacts ?? []) {
+    const who = [contact.name, contact.relationship].filter(Boolean).join(' — ')
+    const numbers = (contact.phones ?? [])
+      .map((p) => (p.label ? `${p.number} (${p.label})` : p.number))
+      .join(', ')
+    if (who || numbers) {
+      lines.push(`Contact: ${[who, numbers].filter(Boolean).join(' — ')}`)
+    }
+  }
   field('Deceased owner', property.deceasedName)
   field('Property', property.propertyAddress)
   field('Tax/legal status', property.taxStatus)

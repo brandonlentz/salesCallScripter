@@ -22,10 +22,34 @@ function storePath() {
   return join(app.getPath('userData'), 'properties.json')
 }
 
+// Records saved before multi-contact support only had a single
+// contactName/contactPhone/contactRelationship. Normalize those into the
+// contacts[] shape on read so every caller (search, the UI) only ever sees
+// one shape — no persisted migration needed, this just runs on load and
+// the new shape gets written back naturally the next time the record is
+// saved.
+function migrateContacts(property) {
+  if (Array.isArray(property.contacts)) return property
+  const { contactName, contactPhone, contactRelationship, ...rest } = property
+  const hasLegacyContact = contactName || contactPhone || contactRelationship
+  return {
+    ...rest,
+    contacts: hasLegacyContact
+      ? [
+          {
+            name: contactName ?? '',
+            relationship: contactRelationship ?? '',
+            phones: contactPhone ? [{ number: contactPhone, label: '' }] : []
+          }
+        ]
+      : []
+  }
+}
+
 async function readAll() {
   try {
     const raw = await fs.readFile(storePath(), 'utf-8')
-    return JSON.parse(raw)
+    return JSON.parse(raw).map(migrateContacts)
   } catch (err) {
     if (err.code === 'ENOENT') return []
     throw err
@@ -46,11 +70,16 @@ export async function searchProperties(query) {
   const properties = await listProperties()
   const q = (query ?? '').trim().toLowerCase()
   if (!q) return properties
-  return properties.filter((p) =>
-    [p.label, p.contactName, p.contactPhone, p.propertyAddress, p.deceasedName]
+  return properties.filter((p) => {
+    const contactFields = (p.contacts ?? []).flatMap((c) => [
+      c.name,
+      c.relationship,
+      ...(c.phones ?? []).map((ph) => ph.number)
+    ])
+    return [p.label, p.propertyAddress, p.deceasedName, ...contactFields]
       .filter(Boolean)
       .some((field) => field.toLowerCase().includes(q))
-  )
+  })
 }
 
 export async function saveProperty(data) {

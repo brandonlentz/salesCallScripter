@@ -124,17 +124,36 @@ open an authenticated REISift session to fetch a page by URL. So instead:
 
 You can still fill the fields in by hand instead — the paste box is optional, just faster.
 
+### Multiple contacts, multiple numbers
+
+A property/lead often has several people worth calling — heirs, a spouse, an associate — each
+with several phone numbers of their own (REISift itself often lists a dozen numbers per owner
+record, each tagged with whose it is). So a property's `contacts` field is a list, and each
+contact has its own list of `{ number, label }` phones, not one flat name/phone pair.
+
+- **Paste & parse** groups numbers under the right person automatically, using REISift's own
+  phone tags/tooltips (e.g. "Tiffany Reece - Darlene great niece") to tell whose number is whose.
+- **The property form** lets you add/remove contacts and, within each, add/remove numbers by
+  hand.
+- **The selected-property panel** lists every contact with every one of their numbers as its own
+  **📞** button — click the specific number you want to dial.
+- **The property list** (search results) shows one quick-call button per row, calling the first
+  contact's first number — a `(N)` badge next to it means there are more numbers on file; open
+  the property to see and call the rest.
+
 ### Click to call
 
-Any property with a phone number saved shows a **📞 Call** button — in the property list and next
-to the selected-property badge. Clicking it hands off to macOS's `tel:` handler (the Phone app /
-Continuity Dialer — the same app this whole live-call setup already routes audio through, so
-nothing new to configure) to actually place the call, selects that property as the call's
-context, and switches the app to Live Call mode. Since the call is dialed *from* that property's
-own record, the app already knows who you're calling — no caller-ID detection needed.
+Clicking any **📞** button hands off to macOS's `tel:` handler (the Phone app / Continuity Dialer
+— the same app this whole live-call setup already routes audio through, so nothing new to
+configure) to actually place the call, selects that property as the call's context, and switches
+the app to Live Call mode. Since the call is dialed *from* that contact's own saved number, the
+app already knows who you're calling — no caller-ID detection needed.
 
 Entries are stored locally (`src/main/properties.js`, Electron's userData dir — outside the repo,
 never committed, since they're seller PII) and are editable/deletable from the same drawer.
+Records saved before multi-contact support (a single contact name/phone/relationship) are
+migrated to the `contacts[]` shape automatically the next time they're loaded — no manual fixup
+needed.
 
 **Property context and prompt caching don't conflict.** The property context is per-call, dynamic
 data, so it's injected into the user message alongside the transcript — not into the (cached)
@@ -142,10 +161,11 @@ system prompt, which stays byte-identical per call type so caching still works (
 [Suggestion latency](#suggestion-latency) above).
 
 **If/when real REISift API or webhook access gets sorted out:** the local property store's field
-shape (`label`, `contactName`, `contactPhone`, `contactRelationship`, `deceasedName`,
-`propertyAddress`, `taxStatus`, `caseNumber`, `knownHeirs`, `priorContactNotes`, `offerAmount`,
-`painPointsSummary`) is designed so a sync job could populate it directly — the search/pick UI
-and the suggestion-engine wiring wouldn't need to change, only how entries get created.
+shape (`label`, `contacts` — each `{ name, relationship, phones: [{ number, label }] }` —
+`deceasedName`, `propertyAddress`, `taxStatus`, `caseNumber`, `knownHeirs`, `priorContactNotes`,
+`offerAmount`, `painPointsSummary`) is designed so a sync job could populate it directly — the
+search/pick UI and the suggestion-engine wiring wouldn't need to change, only how entries get
+created.
 
 ## Live Call
 

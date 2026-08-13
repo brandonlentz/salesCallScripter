@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react'
 
 const BLANK_DRAFT = {
   label: '',
-  contactName: '',
-  contactPhone: '',
-  contactRelationship: '',
+  contacts: [],
   deceasedName: '',
   propertyAddress: '',
   taxStatus: '',
@@ -13,6 +11,19 @@ const BLANK_DRAFT = {
   priorContactNotes: '',
   offerAmount: '',
   painPointsSummary: ''
+}
+
+const BLANK_CONTACT = { name: '', relationship: '', phones: [] }
+const BLANK_PHONE = { number: '', label: '' }
+
+// Flattens every phone across every contact into one list, each entry
+// paired with which contact it belongs to — used anywhere we need "just
+// give me all the callable numbers for this property" (the compact list
+// row's quick-call, mainly) without caring about the grouping.
+function allPhones(property) {
+  return (property.contacts ?? []).flatMap((c) =>
+    (c.phones ?? []).map((p) => ({ contact: c, phone: p }))
+  )
 }
 
 // Slide-in drawer for picking which property/lead the current call is
@@ -91,12 +102,12 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
 
   // Dials via the OS (macOS's tel: handler — the Phone app) and hands the
   // property off to App.jsx to select as call context + switch to Live
-  // Call mode. We already know who this number belongs to because we're
-  // the one placing the call, from this property's own record — no
-  // caller-ID lookup needed.
-  function handleCall(property) {
+  // Call mode. We already know who this number belongs to — both which
+  // contact and which of their numbers — because we're the one placing
+  // the call, from this property's own record. No caller-ID lookup needed.
+  function handleCall(property, phoneNumber) {
     onCall(property)
-    window.api.dialer.call(property.contactPhone)
+    window.api.dialer.call(phoneNumber)
   }
 
   async function handleDelete(id) {
@@ -121,6 +132,53 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
     setDraft((prev) => ({ ...prev, [field]: value }))
   }
 
+  function addContact() {
+    setDraft((prev) => ({ ...prev, contacts: [...(prev.contacts ?? []), { ...BLANK_CONTACT }] }))
+  }
+
+  function removeContact(index) {
+    setDraft((prev) => ({ ...prev, contacts: prev.contacts.filter((_, i) => i !== index) }))
+  }
+
+  function updateContact(index, field, value) {
+    setDraft((prev) => ({
+      ...prev,
+      contacts: prev.contacts.map((c, i) => (i === index ? { ...c, [field]: value } : c))
+    }))
+  }
+
+  function addPhone(contactIndex) {
+    setDraft((prev) => ({
+      ...prev,
+      contacts: prev.contacts.map((c, i) =>
+        i === contactIndex ? { ...c, phones: [...(c.phones ?? []), { ...BLANK_PHONE }] } : c
+      )
+    }))
+  }
+
+  function removePhone(contactIndex, phoneIndex) {
+    setDraft((prev) => ({
+      ...prev,
+      contacts: prev.contacts.map((c, i) =>
+        i === contactIndex ? { ...c, phones: c.phones.filter((_, pi) => pi !== phoneIndex) } : c
+      )
+    }))
+  }
+
+  function updatePhone(contactIndex, phoneIndex, field, value) {
+    setDraft((prev) => ({
+      ...prev,
+      contacts: prev.contacts.map((c, i) =>
+        i === contactIndex
+          ? {
+              ...c,
+              phones: c.phones.map((p, pi) => (pi === phoneIndex ? { ...p, [field]: value } : p))
+            }
+          : c
+      )
+    }))
+  }
+
   return (
     <div className="drawer">
       <div className="drawer__backdrop" onClick={onClose} />
@@ -136,18 +194,44 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
             <>
               {selected && (
                 <div className="property-selected">
-                  <div className="property-selected__label">
-                    <strong>{selected.label}</strong>
-                    {selected.propertyAddress && <span>{selected.propertyAddress}</span>}
-                  </div>
-                  {selected.contactPhone && (
-                    <button type="button" onClick={() => handleCall(selected)}>
-                      📞 Call
+                  <div className="property-selected__header">
+                    <div className="property-selected__label">
+                      <strong>{selected.label}</strong>
+                      {selected.propertyAddress && <span>{selected.propertyAddress}</span>}
+                    </div>
+                    <button type="button" onClick={onClear}>
+                      Clear
                     </button>
+                  </div>
+                  {(selected.contacts ?? []).length > 0 && (
+                    <ul className="property-selected__contacts">
+                      {selected.contacts.map((c, i) => (
+                        <li key={i}>
+                          <span className="property-selected__contact-name">
+                            {c.name}
+                            {c.relationship && <em> — {c.relationship}</em>}
+                          </span>
+                          <span className="property-selected__contact-phones">
+                            {(c.phones ?? []).length === 0 ? (
+                              <span className="panel__hint">no number</span>
+                            ) : (
+                              c.phones.map((p, pi) => (
+                                <button
+                                  key={pi}
+                                  type="button"
+                                  onClick={() => handleCall(selected, p.number)}
+                                  title={p.label ? `${p.number} (${p.label})` : p.number}
+                                >
+                                  📞 {p.number}
+                                  {p.label && <em> {p.label}</em>}
+                                </button>
+                              ))
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                  <button type="button" onClick={onClear}>
-                    Clear
-                  </button>
                 </div>
               )}
 
@@ -169,30 +253,41 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                 </p>
               ) : (
                 <ul className="property-list">
-                  {results.map((p) => (
-                    <li
-                      key={p.id}
-                      className={`property-list__item${selected?.id === p.id ? ' is-selected' : ''}`}
-                    >
-                      <button type="button" className="property-list__main" onClick={() => onSelect(p)}>
-                        <strong>{p.label}</strong>
-                        {(p.propertyAddress || p.contactName) && (
-                          <span>{[p.contactName, p.propertyAddress].filter(Boolean).join(' — ')}</span>
-                        )}
-                      </button>
-                      {p.contactPhone && (
-                        <button type="button" onClick={() => handleCall(p)} title={`Call ${p.contactPhone}`}>
-                          📞 Call
+                  {results.map((p) => {
+                    const phones = allPhones(p)
+                    const first = phones[0]
+                    const primaryContactName = p.contacts?.[0]?.name
+                    return (
+                      <li
+                        key={p.id}
+                        className={`property-list__item${selected?.id === p.id ? ' is-selected' : ''}`}
+                      >
+                        <button type="button" className="property-list__main" onClick={() => onSelect(p)}>
+                          <strong>{p.label}</strong>
+                          {(p.propertyAddress || primaryContactName) && (
+                            <span>
+                              {[primaryContactName, p.propertyAddress].filter(Boolean).join(' — ')}
+                            </span>
+                          )}
                         </button>
-                      )}
-                      <button type="button" onClick={() => startEdit(p)}>
-                        Edit
-                      </button>
-                      <button type="button" onClick={() => handleDelete(p.id)}>
-                        Delete
-                      </button>
-                    </li>
-                  ))}
+                        {first && (
+                          <button
+                            type="button"
+                            onClick={() => handleCall(p, first.phone.number)}
+                            title={`Call ${first.contact.name || 'contact'}: ${first.phone.number}`}
+                          >
+                            📞{phones.length > 1 ? ` (${phones.length})` : ''}
+                          </button>
+                        )}
+                        <button type="button" onClick={() => startEdit(p)}>
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => handleDelete(p.id)}>
+                          Delete
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </>
@@ -227,34 +322,66 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                 />
               </label>
 
-              <div className="property-form__row">
-                <label className="field">
-                  <span>Contact name</span>
-                  <input
-                    type="text"
-                    value={draft.contactName}
-                    onChange={(e) => updateField('contactName', e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Relationship</span>
-                  <input
-                    type="text"
-                    value={draft.contactRelationship}
-                    onChange={(e) => updateField('contactRelationship', e.target.value)}
-                    placeholder="e.g. daughter, neighbor"
-                  />
-                </label>
-              </div>
+              <div className="property-contacts">
+                <span className="property-contacts__label">Contacts</span>
+                {(draft.contacts ?? []).length === 0 && (
+                  <p className="panel__placeholder">No contacts added yet.</p>
+                )}
+                {(draft.contacts ?? []).map((contact, ci) => (
+                  <div className="property-contact" key={ci}>
+                    <div className="property-form__row">
+                      <label className="field">
+                        <span>Name</span>
+                        <input
+                          type="text"
+                          value={contact.name}
+                          onChange={(e) => updateContact(ci, 'name', e.target.value)}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Relationship</span>
+                        <input
+                          type="text"
+                          value={contact.relationship}
+                          onChange={(e) => updateContact(ci, 'relationship', e.target.value)}
+                          placeholder="e.g. daughter, neighbor"
+                        />
+                      </label>
+                    </div>
 
-              <label className="field">
-                <span>Contact phone</span>
-                <input
-                  type="text"
-                  value={draft.contactPhone}
-                  onChange={(e) => updateField('contactPhone', e.target.value)}
-                />
-              </label>
+                    {(contact.phones ?? []).map((phone, pi) => (
+                      <div className="property-phone-row" key={pi}>
+                        <input
+                          type="text"
+                          value={phone.number}
+                          onChange={(e) => updatePhone(ci, pi, 'number', e.target.value)}
+                          placeholder="Phone number"
+                        />
+                        <input
+                          type="text"
+                          value={phone.label}
+                          onChange={(e) => updatePhone(ci, pi, 'label', e.target.value)}
+                          placeholder="Label (optional)"
+                        />
+                        <button type="button" onClick={() => removePhone(ci, pi)}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <div className="property-contact__actions">
+                      <button type="button" onClick={() => addPhone(ci)}>
+                        + Add number
+                      </button>
+                      <button type="button" onClick={() => removeContact(ci)}>
+                        Remove contact
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button type="button" onClick={addContact}>
+                  + Add contact
+                </button>
+              </div>
 
               <label className="field">
                 <span>Deceased owner</span>
