@@ -30,9 +30,12 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   const [callerDeviceId, setCallerDeviceId] = useState(NO_DEVICE)
   const [outputDevices, setOutputDevices] = useState([])
   const [monitorDeviceId, setMonitorDeviceId] = useState(NO_DEVICE)
+  const [monitorError, setMonitorError] = useState('')
+  const [testingMonitor, setTestingMonitor] = useState(false)
 
   const recordersRef = useRef({}) // channel -> MediaRecorder
-  const streamsRef = useRef({}) // channel -> MediaStream
+  const streamsRef = useRef({}) // channel -> MediaStream, call-scoped (torn down on stop())
+  const callerStreamRef = useRef(null) // BlackHole capture, NOT call-scoped — see the effect below
   const firstSpeakerRef = useRef(null) // single-mic mode only
   const swappedRef = useRef(false)
   const debounceRef = useRef(null)
@@ -75,6 +78,43 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     loadDevices()
   }, [])
 
+  // Keep the caller/BlackHole audio flowing to your headset the whole time
+  // you're on the Live Call screen — not just between Start Call/End Call.
+  // BlackHole has no speaker of its own, so without this you'd hear nothing
+  // the instant a call connects (or after one ends) unless a call happened
+  // to be "live" at that exact moment. This stream is intentionally NOT
+  // torn down by stop() — only when the device selection changes or the
+  // component unmounts (leaving Live Call mode). start() reuses this same
+  // stream for transcription capture rather than opening a second one.
+  useEffect(() => {
+    if (!dualStreamMode) return
+    let cancelled = false
+
+    navigator.mediaDevices
+      .getUserMedia({ audio: { deviceId: { exact: callerDeviceId } } })
+      .then(async (stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        callerStreamRef.current = stream
+        await startMonitor(stream)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setMonitorError(`Could not open caller audio device for continuous monitoring: ${err.message}`)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      stopMonitor()
+      callerStreamRef.current?.getTracks().forEach((t) => t.stop())
+      callerStreamRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startMonitor/stopMonitor close over monitorDeviceId intentionally, re-running this effect on every render of those functions would reopen the stream unnecessarily
+  }, [dualStreamMode, callerDeviceId, monitorDeviceId])
+
   const transcriptText = entries
     .map((e) => `${e.speaker === 'rep' ? 'You' : 'Them'}: ${e.text}`)
     .join('\n')
@@ -109,12 +149,7 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     }
   }
 
-  async function openStream(channel, deviceId) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: deviceId } }
-    })
-    streamsRef.current[channel] = stream
-
+  function attachRecorderToStream(channel, stream) {
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : 'audio/webm'
@@ -127,18 +162,42 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     recordersRef.current[channel] = recorder
   }
 
+  // For channels whose stream is call-scoped (your mic; the mixed stream in
+  // single-mic mode) — opened fresh on Start Call, torn down on End Call.
+  // The prospect/caller channel in dual-stream mode does NOT use this — it
+  // reuses the persistent stream from the effect above instead, see start().
+  async function openStream(channel, deviceId) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { exact: deviceId } }
+    })
+    streamsRef.current[channel] = stream
+    attachRecorderToStream(channel, stream)
+  }
+
   // Dual-stream mode: BlackHole (or whatever's selected as Caller audio) has
   // no speaker of its own, so play the same stream we're capturing back out
   // to a real output device — that's how you actually hear the caller.
+  // Any failure here is surfaced in the UI, not just console.warn'd — a
+  // silent failure means you're on a live call unable to hear the prospect
+  // with no indication why.
   async function startMonitor(stream) {
     if (!stream || !monitorAudioRef.current) return
     const audio = monitorAudioRef.current
+    setMonitorError('')
     audio.srcObject = stream
-    if (monitorDeviceId && typeof audio.setSinkId === 'function') {
+    if (typeof audio.setSinkId !== 'function') {
+      setMonitorError(
+        'This app build cannot route audio to a specific output device (setSinkId unsupported). ' +
+          "You won't hear the caller unless your system output is something other than BlackHole."
+      )
+    } else if (monitorDeviceId) {
       try {
         await audio.setSinkId(monitorDeviceId)
       } catch (err) {
-        console.warn('Could not set monitor output device:', err)
+        setMonitorError(
+          `Could not route caller audio to the selected Monitor output (${err.message}). ` +
+            'Pick a different device below before starting the next call.'
+        )
       }
     }
     await audio.play()
@@ -149,6 +208,44 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     if (!audio) return
     audio.pause()
     audio.srcObject = null
+  }
+
+  // Plays a short test tone through the selected Monitor output — lets you
+  // confirm you can actually hear on that device *before* a call starts,
+  // instead of finding out mid-call. Uses a synthesized tone (Web Audio
+  // oscillator routed into a MediaStreamDestination) rather than a static
+  // audio file, so there's nothing to bundle.
+  async function testMonitorAudio() {
+    const audio = monitorAudioRef.current
+    if (!audio) return
+    setMonitorError('')
+    setTestingMonitor(true)
+    let ctx
+    try {
+      ctx = new AudioContext()
+      const dest = ctx.createMediaStreamDestination()
+      const osc = ctx.createOscillator()
+      osc.frequency.value = 440
+      osc.connect(dest)
+      audio.srcObject = dest.stream
+      if (typeof audio.setSinkId !== 'function') {
+        throw new Error('setSinkId unsupported in this app build')
+      }
+      if (monitorDeviceId) {
+        await audio.setSinkId(monitorDeviceId)
+      }
+      await audio.play()
+      osc.start()
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      osc.stop()
+    } catch (err) {
+      setMonitorError(`Test tone failed on that output device: ${err.message}`)
+    } finally {
+      audio.pause()
+      audio.srcObject = null
+      ctx?.close()
+      setTestingMonitor(false)
+    }
   }
 
   async function start() {
@@ -169,8 +266,13 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     try {
       if (dualStreamMode) {
         await openStream('rep', micDeviceId)
-        await openStream('prospect', callerDeviceId)
-        await startMonitor(streamsRef.current.prospect)
+        // Reuse the persistent caller stream (already flowing to your
+        // headset via the effect above) rather than opening a second
+        // capture on the same device — just attach a recorder to it.
+        if (!callerStreamRef.current) {
+          throw new Error('Caller audio device is not ready yet — wait a second and try again.')
+        }
+        attachRecorderToStream('prospect', callerStreamRef.current)
       } else {
         await openStream('mixed', micDeviceId)
       }
@@ -179,7 +281,6 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
       Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
       recordersRef.current = {}
       streamsRef.current = {}
-      stopMonitor()
       await window.api.liveCall.stop(transcriptTextRef.current)
       setError(`Could not open audio device: ${err.message}`)
       setStatus('error')
@@ -208,11 +309,14 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   }
 
   async function stop() {
+    // Stops recorders (including 'prospect', which just detaches from the
+    // persistent caller stream — the recording, not the stream itself) and
+    // any call-scoped streams (your mic). The caller/monitor stream keeps
+    // running so you keep hearing them between calls — see the effect above.
     Object.values(recordersRef.current).forEach((r) => r.stop())
     Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
     recordersRef.current = {}
     streamsRef.current = {}
-    stopMonitor()
     clearTimeout(debounceRef.current)
     unsubscribeRef.current.forEach((off) => off())
     unsubscribeRef.current = []
@@ -237,7 +341,6 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     return () => {
       Object.values(recordersRef.current).forEach((r) => r.stop())
       Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
-      stopMonitor()
       unsubscribeRef.current.forEach((off) => off())
     }
   }, [])
@@ -282,19 +385,26 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
       {dualStreamMode && (
         <label className="field">
           <span>Monitor output (hear the caller)</span>
-          <select
-            value={monitorDeviceId}
-            onChange={(e) => setMonitorDeviceId(e.target.value)}
-            disabled={status !== 'idle'}
-          >
-            {outputDevices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || d.deviceId}
-              </option>
-            ))}
-          </select>
+          <div className="field field--inline">
+            <select
+              value={monitorDeviceId}
+              onChange={(e) => setMonitorDeviceId(e.target.value)}
+              disabled={status !== 'idle'}
+            >
+              {outputDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || d.deviceId}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={testMonitorAudio} disabled={testingMonitor}>
+              {testingMonitor ? 'Playing…' : '🔊 Test'}
+            </button>
+          </div>
         </label>
       )}
+
+      {monitorError && <p className="panel__error">{monitorError}</p>}
 
       {/* eslint-disable-next-line jsx-a11y/media-has-caption -- live monitor relay, not user media */}
       <audio ref={monitorAudioRef} hidden />
@@ -304,10 +414,11 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
           <>
             Dual-stream mode: your mic and the caller audio device are captured separately, so
             speaker labels are exact. Your Mac&apos;s <strong>system output</strong> should be set
-            to Caller audio&apos;s device alone (e.g. BlackHole 2ch) during calls — the app plays
-            that stream back out to Monitor output above so you can hear them. Don&apos;t use a
-            Multi-Output Device for this; some call apps (including the Phone app) silently ignore
-            aggregate output devices.
+            to Caller audio&apos;s device alone (e.g. BlackHole 2ch) at all times on this screen —
+            the app relays that audio out to Monitor output continuously (not just during a call),
+            so you&apos;ll hear them as soon as the call connects, no Start Call needed first.
+            Don&apos;t use a Multi-Output Device for this; some call apps (including the Phone app)
+            silently ignore aggregate output devices.
           </>
         ) : blackholeAvailable ? (
           <>
