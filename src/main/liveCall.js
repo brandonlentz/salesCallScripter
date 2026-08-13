@@ -69,7 +69,13 @@ export function registerLiveCallHandlers(getMainWindow, appRootDir) {
     if (recording) {
       const activeRecording = recording
       recording = null
-      await activeRecording.finish({ transcriptText })
+      const { mergeError } = await activeRecording.finish({ transcriptText })
+      if (mergeError) {
+        getMainWindow()?.webContents.send(
+          'live-call:error',
+          `Recording saved, but merging into one file failed: ${mergeError}`
+        )
+      }
     }
   })
 }

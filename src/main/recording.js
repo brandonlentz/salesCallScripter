@@ -1,6 +1,7 @@
 import { createWriteStream } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { spawn } from 'node:child_process'
 
 // recordings/ lives at the project root and is gitignored (real seller PII
 // plus call audio) — same convention as transcripts/ and data/, see the
@@ -17,6 +18,66 @@ function sanitizeForPath(text) {
     .replace(/[^a-z0-9]+/gi, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
+}
+
+// Dual-stream calls record the rep and prospect as separate mono files —
+// good for exact speaker labels, bad for just listening back to the call.
+// Merge them into one stereo file (rep on the left channel, prospect on the
+// right — reviewable in any player, still spatially separated) via ffmpeg.
+// Requires ffmpeg on PATH (brew install ffmpeg); this is best-effort and
+// never blocks the per-channel recording, which already succeeded by the
+// time this runs.
+//
+// This is NOT a plain amerge/join of the two mono tracks — both of those
+// filters silently truncate to the length of the SHORTER input by default,
+// which would cut off whoever kept talking after the other side went quiet
+// (verified against real audio while building this). Instead, each mono
+// track is panned hard to its own stereo channel (silence on the other)
+// and combined with amix's duration=longest, which pads the shorter track
+// with silence instead of truncating the longer one. normalize=0 because
+// amix's default loudness normalization is for overlapping content on the
+// same channel — there isn't any here, each channel has exactly one source.
+function mergeChannels(dir) {
+  const repPath = join(dir, 'audio-rep.webm')
+  const prospectPath = join(dir, 'audio-prospect.webm')
+  const outputFile = 'audio-merged.mp3'
+
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-y',
+      '-i',
+      repPath,
+      '-i',
+      prospectPath,
+      '-filter_complex',
+      '[0:a]aresample=async=1,pan=stereo|c0=c0|c1=0*c0[a0];' +
+        '[1:a]aresample=async=1,pan=stereo|c0=0*c0|c1=c0[a1];' +
+        '[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]',
+      '-map',
+      '[aout]',
+      '-c:a',
+      'libmp3lame',
+      '-q:a',
+      '4',
+      join(dir, outputFile)
+    ])
+
+    let stderr = ''
+    ffmpeg.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    ffmpeg.on('error', (err) => {
+      if (err.code === 'ENOENT') {
+        reject(new Error('ffmpeg is not installed — run "brew install ffmpeg" to get merged-call audio.'))
+      } else {
+        reject(err)
+      }
+    })
+    ffmpeg.on('close', (code) => {
+      if (code === 0) resolve(outputFile)
+      else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`))
+    })
+  })
 }
 
 // Starts recording a live call to disk: one raw audio file per channel
@@ -43,6 +104,17 @@ export async function startRecording(appRootDir, { callType, channels, property 
       await Promise.all(
         Array.from(streams.values()).map((stream) => new Promise((resolve) => stream.end(resolve)))
       )
+
+      let mergedAudioFile = null
+      let mergeError = null
+      if (channels.includes('rep') && channels.includes('prospect')) {
+        try {
+          mergedAudioFile = await mergeChannels(dir)
+        } catch (err) {
+          mergeError = err.message
+        }
+      }
+
       if (transcriptText) {
         await writeFile(join(dir, 'transcript.txt'), transcriptText, 'utf-8')
       }
@@ -54,14 +126,15 @@ export async function startRecording(appRootDir, { callType, channels, property 
             channels,
             property: property ?? null,
             startedAt: startedAt.toISOString(),
-            endedAt: new Date().toISOString()
+            endedAt: new Date().toISOString(),
+            mergedAudioFile
           },
           null,
           2
         ),
         'utf-8'
       )
-      return dir
+      return { dir, mergeError }
     }
   }
 }

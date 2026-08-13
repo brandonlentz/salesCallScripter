@@ -187,6 +187,13 @@ to the status line confirms it's active; if the recording itself fails to start 
 issue), the call still proceeds — transcription and coaching aren't affected — but an error
 banner will say so, since that call went unrecorded.
 
+**Dual-stream calls also get a single merged file, `audio-merged.mp3`** — the two mono channels
+combined into one stereo file (you on the left channel, the prospect on the right), for actually
+listening back to a call instead of juggling two files. Requires **ffmpeg** on your PATH (`brew
+install ffmpeg`); if it's missing, or the merge otherwise fails, the two per-channel `.webm`
+files are still saved — you'll just get an error banner and no `audio-merged.mp3` for that call.
+Single-mic mode doesn't need this: `audio-mixed.webm` already has both sides of the call.
+
 Like `transcripts/` and `data/`, this folder is gitignored and local-only (real seller PII plus
 call audio). **Check your state's call-recording consent law before relying on this** — Texas
 (where the calls in this app originate) is one-party consent, but if you're ever calling into or
