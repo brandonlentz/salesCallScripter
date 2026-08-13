@@ -6,8 +6,15 @@ const api = {
     loadTranscript: (id) => ipcRenderer.invoke('training:load-transcript', id)
   },
   suggestions: {
-    get: (transcriptText, callType, property) =>
-      ipcRenderer.invoke('suggestions:get', { transcriptText, callType, property })
+    get: (transcriptText, callType, property, variantId) =>
+      ipcRenderer.invoke('suggestions:get', { transcriptText, callType, property, variantId })
+  },
+  scriptVariants: {
+    list: (callType) => ipcRenderer.invoke('scriptVariants:list', callType),
+    get: (callType, id) => ipcRenderer.invoke('scriptVariants:get', { callType, id }),
+    save: (callType, data) => ipcRenderer.invoke('scriptVariants:save', { callType, data }),
+    delete: (callType, id) => ipcRenderer.invoke('scriptVariants:delete', { callType, id }),
+    parse: (rawText) => ipcRenderer.invoke('scriptVariants:parse', rawText)
   },
   properties: {
     list: () => ipcRenderer.invoke('properties:list'),

@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
-import { CALL_SCRIPTS } from '../../shared/callScripts.js'
 
 // Slide-in drawer showing the word-for-word script for the current call
 // type, auto-scrolled to whichever stage the suggestion engine thinks the
-// call is in. Ported from call-tracker's ScriptDrawer.tsx.
-export default function ScriptPanel({ open, onClose, callType, activeStage }) {
-  const script = CALL_SCRIPTS[callType]
+// call is in. Originally ported from call-tracker's ScriptDrawer.tsx;
+// `sections` is now passed in by App.jsx (the currently-selected script
+// variant's sections — see scriptVariants.js) instead of being read
+// directly from the hardcoded CALL_SCRIPTS, since a variant may differ
+// from the builtin script.
+export default function ScriptPanel({ open, onClose, callType, activeStage, sections }) {
   const sectionRefs = useRef({})
   const scrollContainerRef = useRef(null)
 
@@ -31,7 +33,7 @@ export default function ScriptPanel({ open, onClose, callType, activeStage }) {
           </button>
         </div>
         <div className="drawer__body" ref={scrollContainerRef}>
-          {script.map((section) => {
+          {sections.map((section) => {
             const isActive = section.stage === activeStage
             return (
               <div

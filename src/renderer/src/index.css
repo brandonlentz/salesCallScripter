@@ -605,3 +605,127 @@ body {
   gap: 0.5rem;
   justify-content: flex-end;
 }
+
+.variant-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.variant-list__item {
+  border: 1px solid #2a2e35;
+  background: #22262d;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.variant-list__item.is-selected {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.variant-list__main {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.variant-list__main strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.variant-list__main span {
+  display: block;
+  font-size: 0.75rem;
+  color: #9a9fa6;
+}
+
+.variant-list__item button {
+  background: transparent;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  color: #9a9fa6;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.variant-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.variant-form input,
+.variant-form textarea {
+  background: #14161a;
+  color: #f2f2f2;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.variant-form > button {
+  align-self: flex-start;
+  background: #22262d;
+  color: #f2f2f2;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.variant-form > button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.variant-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border: 1px solid #2a2e35;
+  background: #191c22;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
+
+.variant-preview__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #9a9fa6;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.variant-preview__section {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+}
+
+.variant-preview__section strong {
+  color: #f2f2f2;
+}
+
+.variant-preview__section span {
+  color: #9a9fa6;
+  font-size: 0.75rem;
+}

@@ -1,9 +1,12 @@
-import { useCallback, useState } from 'react'
-import { CALL_TYPES, getStages } from '../../shared/callScripts.js'
+import { useCallback, useEffect, useState } from 'react'
+import { CALL_TYPES, CALL_SCRIPTS, getStages } from '../../shared/callScripts.js'
 import TrainingPanel from './TrainingPanel'
 import LiveCallPanel from './LiveCallPanel'
 import ScriptPanel from './ScriptPanel'
 import PropertyPanel from './PropertyPanel'
+import ScriptVariantPanel from './ScriptVariantPanel'
+
+const ORIGINAL_VARIANT = { id: 'original', label: 'Original' }
 
 const initialSuggestionState = {
   loading: false,
@@ -22,25 +25,68 @@ function App() {
   const [selectedProperty, setSelectedProperty] = useState(null)
   const [propertyOpen, setPropertyOpen] = useState(false)
 
+  // Script variants (lightweight split-testing) — see scriptVariants.js.
+  // `variants` is the list for the current call type (seeded with the
+  // builtin "Original" so the picker never renders empty while the real
+  // list loads); `variantId` is which one is "live"; `variantSections` is
+  // that variant's actual sections, fetched via IPC since it's no longer a
+  // static import once variants can be created at runtime.
+  const [variantId, setVariantId] = useState('original')
+  const [variants, setVariants] = useState([ORIGINAL_VARIANT])
+  const [variantSections, setVariantSections] = useState(null)
+  const [variantPanelOpen, setVariantPanelOpen] = useState(false)
+
+  const refreshVariants = useCallback(() => {
+    window.api.scriptVariants.list(callType).then(setVariants)
+  }, [callType])
+
+  useEffect(() => {
+    refreshVariants()
+  }, [refreshVariants])
+
+  useEffect(() => {
+    let cancelled = false
+    window.api.scriptVariants.get(callType, variantId).then((v) => {
+      if (!cancelled) setVariantSections(v.sections)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [callType, variantId])
+
+  // Falls back to the builtin script while a variant fetch is in flight (or
+  // for the common 'original' case) rather than showing nothing.
+  const activeSections = variantSections ?? CALL_SCRIPTS[callType]
+
   const requestSuggestions = useCallback(
     async (text) => {
       if (!text.trim()) return
 
       setSuggestionState((prev) => ({ ...prev, loading: true, error: '' }))
       try {
-        const result = await window.api.suggestions.get(text, callType, selectedProperty)
+        const result = await window.api.suggestions.get(text, callType, selectedProperty, variantId)
         setSuggestionState({ loading: false, error: '', ...result })
       } catch (err) {
         setSuggestionState((prev) => ({ ...prev, loading: false, error: err.message }))
       }
     },
-    [callType, selectedProperty]
+    [callType, selectedProperty, variantId]
   )
 
   // Changing call type mid-session invalidates whatever stage/suggestions
-  // were computed under the old script.
+  // were computed under the old script, and resets to that call type's
+  // Original variant since a variant id is only meaningful within the call
+  // type it was created for.
   function handleCallTypeChange(next) {
     setCallType(next)
+    setVariantId('original')
+    setVariantSections(null)
+    setSuggestionState(initialSuggestionState)
+  }
+
+  function handleVariantChange(next) {
+    setVariantId(next)
+    setVariantSections(null)
     setSuggestionState(initialSuggestionState)
   }
 
@@ -61,7 +107,7 @@ function App() {
     setPropertyOpen(false)
   }
 
-  const stages = getStages(callType)
+  const stages = getStages(callType, activeSections)
   const activeStage = suggestionState.stage ?? stages[0].id
 
   return (
@@ -98,6 +144,19 @@ function App() {
               ))}
             </select>
           </label>
+          <label className="field field--inline">
+            <span>Script</span>
+            <select value={variantId} onChange={(e) => handleVariantChange(e.target.value)}>
+              {variants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={() => setVariantPanelOpen(true)}>
+            Manage Scripts
+          </button>
           <button type="button" onClick={() => setScriptOpen(true)}>
             Script
           </button>
@@ -176,6 +235,7 @@ function App() {
         onClose={() => setScriptOpen(false)}
         callType={callType}
         activeStage={activeStage}
+        sections={activeSections}
       />
 
       <PropertyPanel
@@ -188,6 +248,19 @@ function App() {
         }}
         onClear={() => setSelectedProperty(null)}
         onCall={handleCall}
+      />
+
+      <ScriptVariantPanel
+        open={variantPanelOpen}
+        onClose={() => setVariantPanelOpen(false)}
+        callType={callType}
+        variants={variants}
+        selectedId={variantId}
+        onSelect={(id) => {
+          handleVariantChange(id)
+          setVariantPanelOpen(false)
+        }}
+        onChanged={refreshVariants}
       />
     </div>
   )

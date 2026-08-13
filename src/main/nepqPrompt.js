@@ -1,18 +1,23 @@
 import { CALL_SCRIPTS, getStageIds } from '../shared/callScripts.js'
 
-function formatScript(callType) {
-  return CALL_SCRIPTS[callType]
+function formatScript(sections) {
+  return sections
     .map((section) => `### ${section.stage} — ${section.title}\n${section.lines.join('\n')}`)
     .join('\n\n')
 }
 
-// System prompt for the suggestion engine, one per call type. Built around
-// Jeremy Miner's NEPQ (Neuro-Emotional Persuasion Questioning) principles —
-// lead with curiosity, uncover pain before pitching, let silence work — but
-// grounded in the salesperson's actual word-for-word call script rather than
-// generic NEPQ theory, so suggestions sound like the rep, not like an AI.
-export function buildSystemPrompt(callType) {
-  const stageIds = getStageIds(callType)
+// System prompt for the suggestion engine, one per call type/script variant.
+// Built around Jeremy Miner's NEPQ (Neuro-Emotional Persuasion Questioning)
+// principles — lead with curiosity, uncover pain before pitching, let
+// silence work — but grounded in the salesperson's actual word-for-word
+// call script rather than generic NEPQ theory, so suggestions sound like
+// the rep, not like an AI.
+//
+// `sections` is a script variant's own sections (see scriptVariants.js),
+// defaulting to the builtin script so callers that haven't been updated to
+// pass a variant explicitly keep working.
+export function buildSystemPrompt(callType, sections = CALL_SCRIPTS[callType]) {
+  const stageIds = getStageIds(callType, sections)
 
   return `You are a real-time sales call coach for a rep at Pickle Deeds (pickledeeds.com), a \
 Texas company that buys properties with title issues (heir disputes, probate, clouded titles) \
@@ -28,7 +33,7 @@ phrasing. Where the script calls for silence or a pause, say so explicitly in th
 
 SCRIPT:
 
-${formatScript(callType)}
+${formatScript(sections)}
 
 You will be given the rolling transcript of the live call, oldest to newest. It may be raw \
 speech-to-text output without speaker labels or punctuation cleanup — do your best to infer \

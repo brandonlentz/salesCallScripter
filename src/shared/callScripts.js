@@ -213,12 +213,16 @@ export const CALL_SCRIPTS = {
 
 export const CALL_TYPES = Object.keys(CALL_SCRIPTS)
 
-export function getStages(callType) {
-  const script = CALL_SCRIPTS[callType]
-  if (!script) throw new Error(`Unknown call type: ${callType}`)
-  return script.map((section) => ({ id: section.stage, label: section.title }))
+// Both accept `sections` directly (a script variant's own sections — see
+// scriptVariants.js) rather than only looking up the hardcoded
+// CALL_SCRIPTS[callType], since a variant may rename, add, or drop stages.
+// `sections` defaults to the builtin script for callers that haven't been
+// updated to pass a variant explicitly.
+export function getStages(callType, sections = CALL_SCRIPTS[callType]) {
+  if (!sections) throw new Error(`Unknown call type: ${callType}`)
+  return sections.map((section) => ({ id: section.stage, label: section.title }))
 }
 
-export function getStageIds(callType) {
-  return getStages(callType).map((s) => s.id)
+export function getStageIds(callType, sections = CALL_SCRIPTS[callType]) {
+  return getStages(callType, sections).map((s) => s.id)
 }

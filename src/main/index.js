@@ -12,6 +12,8 @@ import {
   deleteProperty
 } from './properties.js'
 import { parsePropertyText } from './parseProperty.js'
+import { listVariants, getVariant, saveVariant, deleteVariant } from './scriptVariants.js'
+import { parseScriptVariant } from './parseScriptVariant.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -56,9 +58,14 @@ function createWindow() {
 function registerIpcHandlers() {
   ipcMain.handle('training:list-transcripts', () => listTranscripts(appRootDir))
   ipcMain.handle('training:load-transcript', (_event, id) => loadTranscript(appRootDir, id))
-  ipcMain.handle('suggestions:get', (_event, { transcriptText, callType, property }) =>
-    getSuggestions(transcriptText, callType, property)
+  ipcMain.handle('suggestions:get', (_event, { transcriptText, callType, property, variantId }) =>
+    getSuggestions(transcriptText, callType, property, variantId)
   )
+  ipcMain.handle('scriptVariants:list', (_event, callType) => listVariants(callType))
+  ipcMain.handle('scriptVariants:get', (_event, { callType, id }) => getVariant(callType, id))
+  ipcMain.handle('scriptVariants:save', (_event, { callType, data }) => saveVariant(callType, data))
+  ipcMain.handle('scriptVariants:delete', (_event, { callType, id }) => deleteVariant(callType, id))
+  ipcMain.handle('scriptVariants:parse', (_event, rawText) => parseScriptVariant(rawText))
   ipcMain.handle('properties:list', () => listProperties())
   ipcMain.handle('properties:search', (_event, query) => searchProperties(query))
   ipcMain.handle('properties:save', (_event, data) => saveProperty(data))

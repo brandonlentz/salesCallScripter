@@ -25,6 +25,31 @@ The suggestion engine treats these scripts as ground truth: given the rolling ca
 it figures out which stage the call is in and surfaces the closest-matching lines from the
 script rather than inventing new phrasing.
 
+## Script Variants
+
+Each call type can have more than one version of its script — a lightweight way to
+split-test wording (a different opening, a reworded objection response) without touching
+code. Every call type always has an **Original** variant (the scripts described above,
+un-deletable); anything else you add is a named alternative you can switch to per call.
+
+- The **Script** dropdown next to **Call type** in the header picks which variant is live —
+  it controls both what the suggestion engine grounds itself in and what the Script drawer
+  shows.
+- **Manage Scripts** opens a drawer to view all variants for the current call type, delete
+  ones you no longer want (Original can't be deleted), or add a new one.
+- **+ New Variant**: paste in a script draft — headed with `### Stage — Title` sections like
+  the built-in scripts, or much rougher (notes, a rough draft, a transcript from other source
+  material) — and click **Parse Script**. Claude structures it into sections, shown for review
+  (title + line count + a preview of the first line) before you save. On loose, non-quoted
+  notes the parser will lightly turn description into spoken lines rather than only extracting
+  verbatim quotes — review the result rather than assuming it's a literal transcription.
+
+There's no in-app outcome tracking (win/loss) tied to variants — this is judge-by-ear/by-results,
+not a statistical A/B test. Variants are stored locally (`src/main/scriptVariants.js`, Electron's
+userData dir — not committed, and not PII, just kept there so adding one never needs a rebuild)
+and are picked up by both Training Mode and Live Call, since both call the same suggestion
+engine.
+
 ## Tech Stack
 
 - **Electron** — macOS desktop shell
@@ -157,7 +182,8 @@ needed.
 
 **Property context and prompt caching don't conflict.** The property context is per-call, dynamic
 data, so it's injected into the user message alongside the transcript — not into the (cached)
-system prompt, which stays byte-identical per call type so caching still works (see
+system prompt, which stays byte-identical per call type + script variant so caching still works
+(see
 [Suggestion latency](#suggestion-latency) above).
 
 **If/when real REISift API or webhook access gets sorted out:** the local property store's field
@@ -248,9 +274,9 @@ there:
 - **Model:** Claude Haiku 4.5, not Sonnet — this is bounded classification/retrieval against a
   fixed script (which line comes next), not open-ended generation, so Haiku is both fast enough
   and cheaper.
-- **Prompt caching:** the call script is identical on every request for a given call type, so
-  it's marked cacheable (`cache_control: ephemeral`) — only the short rolling transcript gets
-  processed fresh each time.
+- **Prompt caching:** the call script is identical on every request for a given call type +
+  script variant, so it's marked cacheable (`cache_control: ephemeral`) — only the short
+  rolling transcript gets processed fresh each time.
 - **Short suggestions:** the prompt caps each suggestion to one sentence under 25 words and
   forbids quoting a whole multi-sentence script passage into one suggestion — both for speed
   (shorter completions) and to avoid the response getting cut off mid-JSON before the

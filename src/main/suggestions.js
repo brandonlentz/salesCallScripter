@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { buildSystemPrompt, buildPropertyContext } from './nepqPrompt.js'
-import { CALL_TYPES, getStageIds } from '../shared/callScripts.js'
+import { CALL_TYPES, CALL_SCRIPTS, getStageIds } from '../shared/callScripts.js'
+import { getVariant } from './scriptVariants.js'
 
 const MAX_TOKENS = 700
 
@@ -20,8 +21,15 @@ function getClient() {
 // replayed in Training Mode), ask Claude which stage of that call's script
 // the call is in and which lines from the script to surface next. `property`
 // is an optional locally-saved property/lead record (see properties.js) —
-// pass null when no property is selected for this call.
-export async function getSuggestions(transcriptText, callType, property = null) {
+// pass null when no property is selected for this call. `variantId` selects
+// which of that call type's script variants (see scriptVariants.js) is
+// "live" for this request — defaults to the builtin 'original' script.
+export async function getSuggestions(
+  transcriptText,
+  callType,
+  property = null,
+  variantId = 'original'
+) {
   if (!CALL_TYPES.includes(callType)) {
     throw new Error(`Unknown call type: ${callType}`)
   }
@@ -32,6 +40,13 @@ export async function getSuggestions(transcriptText, callType, property = null) 
       'ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.'
     )
   }
+
+  // The 'original' variant is always seeded from CALL_SCRIPTS on first
+  // read (see scriptVariants.js), but fall back to CALL_SCRIPTS directly
+  // rather than hitting the store when it's the default — keeps the common
+  // case (no variant picked) from depending on the userData store existing.
+  const sections =
+    variantId === 'original' ? CALL_SCRIPTS[callType] : (await getVariant(callType, variantId)).sections
 
   const message = await anthropic.messages.create({
     // Haiku 4.5: this is on the critical path of a live call (target is a
@@ -49,12 +64,12 @@ export async function getSuggestions(transcriptText, callType, property = null) 
     system: [
       {
         type: 'text',
-        text: buildSystemPrompt(callType),
+        text: buildSystemPrompt(callType, sections),
         // The script text is identical on every request for a given call
-        // type, so mark it cacheable. Note: Haiku 4.5's minimum cacheable
-        // prefix is 4096 tokens, and a single call type's script usually
-        // runs under that, so this may not actually hit cache today — left
-        // in since it's free and starts paying off if the scripts grow.
+        // type + variant, so mark it cacheable. Note: Haiku 4.5's minimum
+        // cacheable prefix is 4096 tokens, and a single script usually runs
+        // under that, so this may not actually hit cache today — left in
+        // since it's free and starts paying off if scripts grow.
         cache_control: { type: 'ephemeral' }
       }
     ],
@@ -80,10 +95,10 @@ export async function getSuggestions(transcriptText, callType, property = null) 
     )
   }
 
-  return parseSuggestionResponse(raw, callType)
+  return parseSuggestionResponse(raw, callType, sections)
 }
 
-function parseSuggestionResponse(raw, callType) {
+function parseSuggestionResponse(raw, callType, sections) {
   // Claude is instructed to return bare JSON, but strip markdown fences
   // defensively in case it wraps the response anyway.
   const cleaned = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
@@ -95,7 +110,7 @@ function parseSuggestionResponse(raw, callType) {
     throw new Error(`Suggestion engine returned unparseable output: ${raw.slice(0, 200)}`)
   }
 
-  if (!getStageIds(callType).includes(parsed.stage)) {
+  if (!getStageIds(callType, sections).includes(parsed.stage)) {
     throw new Error(`Suggestion engine returned an unknown stage: ${parsed.stage}`)
   }
 
