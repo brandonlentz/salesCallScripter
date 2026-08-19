@@ -114,6 +114,23 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
     window.api.dialer.call(phoneNumber)
   }
 
+  // FaceTime is still a "call" for coaching purposes — same auto-start
+  // treatment as a Phone call (see App.jsx's handleCall/dialSignal). The
+  // native tap likely captures FaceTime audio too (same underlying daemon
+  // as Phone/Continuity calls — see native/audiotap/main.swift), but that's
+  // only confirmed for Phone calls so far; worth trying it on a real
+  // FaceTime call.
+  function handleFaceTime(property, contact, phoneNumber) {
+    onCall(property, contact)
+    window.api.dialer.facetime(phoneNumber)
+  }
+
+  // Texting isn't a call — no live-call session to start, just hands off to
+  // Messages.app with the conversation open so you type/send it yourself.
+  function handleText(phoneNumber) {
+    window.api.dialer.text(phoneNumber)
+  }
+
   async function handleDelete(id) {
     await window.api.properties.delete(id)
     if (selected?.id === id) onClear()
@@ -219,17 +236,33 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                             {(c.phones ?? []).length === 0 ? (
                               <span className="panel__hint">no number</span>
                             ) : (
-                              c.phones.map((p, pi) => (
-                                <button
-                                  key={pi}
-                                  type="button"
-                                  onClick={() => handleCall(selected, c, p.number)}
-                                  title={p.label ? `${p.number} (${p.label})` : p.number}
-                                >
-                                  📞 {p.number}
-                                  {p.label && <em> {p.label}</em>}
-                                </button>
-                              ))
+                              c.phones.map((p, pi) => {
+                                const label = p.label ? `${p.number} (${p.label})` : p.number
+                                return (
+                                  <span className="phone-actions" key={pi}>
+                                    <button type="button" onClick={() => handleCall(selected, c, p.number)} title={`Call ${label}`}>
+                                      📞 {p.number}
+                                      {p.label && <em> {p.label}</em>}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFaceTime(selected, c, p.number)}
+                                      title={`FaceTime ${label}`}
+                                      aria-label={`FaceTime ${label}`}
+                                    >
+                                      🎥
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleText(p.number)}
+                                      title={`Text ${label}`}
+                                      aria-label={`Text ${label}`}
+                                    >
+                                      💬
+                                    </button>
+                                  </span>
+                                )
+                              })
                             )}
                           </span>
                         </li>

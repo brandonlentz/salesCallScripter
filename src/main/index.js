@@ -86,13 +86,27 @@ function registerIpcHandlers() {
   ipcMain.handle('properties:update', (_event, { id, data }) => updateProperty(id, data))
   ipcMain.handle('properties:delete', (_event, id) => deleteProperty(id))
   ipcMain.handle('properties:parse', (_event, rawText) => parsePropertyText(rawText))
-  // Hands off to macOS's tel: handler — the Phone app / Continuity Dialer,
-  // the same app this whole live-call setup already routes audio through.
-  // We're not placing the call ourselves, just triggering the OS to.
-  ipcMain.handle('dialer:call', (_event, phoneNumber) => {
+  // Hands off to the matching macOS URL handler — tel: (Phone app /
+  // Continuity Dialer, the same app the whole live-call setup already
+  // routes audio through), facetime: (FaceTime.app, video), or sms:
+  // (Messages.app). We're not placing the call/composing the text
+  // ourselves, just triggering the OS app to. FaceTime is likely captured
+  // by the same native-tap target as Phone calls (both are believed to run
+  // through com.apple.avconferenced — see native/audiotap/main.swift's
+  // header comment) but that's only confirmed for Phone calls so far.
+  function digitsOnly(phoneNumber) {
     const digits = String(phoneNumber ?? '').replace(/[^\d+]/g, '')
-    if (!digits) throw new Error('No phone number to call.')
-    shell.openExternal(`tel:${digits}`)
+    if (!digits) throw new Error('No phone number.')
+    return digits
+  }
+  ipcMain.handle('dialer:call', (_event, phoneNumber) => {
+    shell.openExternal(`tel:${digitsOnly(phoneNumber)}`)
+  })
+  ipcMain.handle('dialer:facetime', (_event, phoneNumber) => {
+    shell.openExternal(`facetime:${digitsOnly(phoneNumber)}`)
+  })
+  ipcMain.handle('dialer:text', (_event, phoneNumber) => {
+    shell.openExternal(`sms:${digitsOnly(phoneNumber)}`)
   })
   registerLiveCallHandlers(() => mainWindow, appRootDir)
 }

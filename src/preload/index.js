@@ -31,7 +31,9 @@ const api = {
     parse: (rawText) => ipcRenderer.invoke('properties:parse', rawText)
   },
   dialer: {
-    call: (phoneNumber) => ipcRenderer.invoke('dialer:call', phoneNumber)
+    call: (phoneNumber) => ipcRenderer.invoke('dialer:call', phoneNumber),
+    facetime: (phoneNumber) => ipcRenderer.invoke('dialer:facetime', phoneNumber),
+    text: (phoneNumber) => ipcRenderer.invoke('dialer:text', phoneNumber)
   },
   callAnalysis: {
     analyze: (transcriptText, callType) =>

@@ -547,8 +547,15 @@ body {
 .property-selected__contact-phones {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.6rem;
   margin-top: 0.3rem;
+}
+
+/* Groups the call/FaceTime/text buttons for one phone number together,
+   visually separate from the next number's group. */
+.phone-actions {
+  display: inline-flex;
+  gap: 0.25rem;
 }
 
 .property-selected__contact-phones button {

@@ -254,19 +254,35 @@ contact has its own list of `{ number, label }` phones, not one flat name/phone 
   contact's first number — a `(N)` badge next to it means there are more numbers on file; open
   the property to see and call the rest.
 
-### Click to call
+### Click to call, FaceTime, or text
 
-Clicking any **📞** button hands off to macOS's `tel:` handler (the Phone app / Continuity Dialer
-— the same app this whole live-call setup already routes audio through, so nothing new to
-configure) to actually place the call, and starts the Live Call panel automatically — see
-[Using it — every call is captured automatically](#using-it--every-call-is-captured-automatically)
-above. Since the call is dialed *from* that specific contact's own saved number, the app already
-knows exactly who you're calling — no caller-ID detection needed — and passes that contact's name
-and relationship to the suggestion engine as `YOU ARE CALLING: ...` (see `buildPropertyContext` in
-`src/main/nepqPrompt.js`), not just the property in general. That matters once a property has
-several contacts, each with several numbers, and the script has a `[NAME]`-style placeholder to
-fill in. If a call ever starts without a specific contact selected (e.g. you pick a property but
-don't click a numbered contact), nothing is guessed — the placeholder stays a placeholder.
+Each contact's number in the expanded **Property** panel has three buttons:
+
+- **📞 Call** — hands off to macOS's `tel:` handler (the Phone app / Continuity Dialer — the same
+  app this whole live-call setup already routes audio through) and starts the Live Call panel
+  automatically — see [Using it — recording starts automatically, ends with one
+  click](#using-it--recording-starts-automatically-ends-with-one-click) above.
+- **🎥 FaceTime** — hands off to `facetime:`, opens FaceTime.app, and starts the Live Call panel
+  the same way a phone call does (it's still a "call" for coaching purposes). The native tap
+  likely captures FaceTime audio too — the same underlying daemon
+  (`com.apple.avconferenced`) is believed to handle both — but that's only been directly
+  confirmed on real Phone calls so far, not FaceTime. Try it and see; if transcription doesn't
+  pick up the other side, the Phone/Continuity path is the well-tested one.
+- **💬 Text** — hands off to `sms:`, opening Messages.app with that conversation ready to go. This
+  one does **not** start the Live Call panel — there's no call audio to capture, and it doesn't
+  send anything on your behalf; you still type and hit send yourself.
+
+The compact search-results list only shows the **📞** shortcut (first contact, first number) — open
+the property (click its row) to get the FaceTime/text options for every contact and number.
+
+Since a call/FaceTime dial is placed *from* that specific contact's own saved number, the app
+already knows exactly who you're calling — no caller-ID detection needed — and passes that
+contact's name and relationship to the suggestion engine as `YOU ARE CALLING: ...` (see
+`buildPropertyContext` in `src/main/nepqPrompt.js`), not just the property in general. That
+matters once a property has several contacts, each with several numbers, and the script has a
+`[NAME]`-style placeholder to fill in. If a call ever starts without a specific contact selected
+(e.g. you pick a property but don't click a numbered contact), nothing is guessed — the
+placeholder stays a placeholder.
 
 Entries are stored locally (`src/main/properties.js`, Electron's userData dir — outside the repo,
 never committed, since they're seller PII) and are editable/deletable from the same drawer.
