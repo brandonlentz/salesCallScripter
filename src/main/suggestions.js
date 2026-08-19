@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { buildSystemPrompt, buildPropertyContext } from './nepqPrompt.js'
 import { CALL_TYPES, CALL_SCRIPTS, getStageIds } from '../shared/callScripts.js'
 import { getVariant } from './scriptVariants.js'
+import { getAllReferenceContent } from './nepqReferences.js'
 
 const MAX_TOKENS = 700
 
@@ -47,6 +48,7 @@ export async function getSuggestions(
   // case (no variant picked) from depending on the userData store existing.
   const sections =
     variantId === 'original' ? CALL_SCRIPTS[callType] : (await getVariant(callType, variantId)).sections
+  const referenceContent = await getAllReferenceContent()
 
   const message = await anthropic.messages.create({
     // Haiku 4.5: this is on the critical path of a live call (target is a
@@ -64,7 +66,7 @@ export async function getSuggestions(
     system: [
       {
         type: 'text',
-        text: buildSystemPrompt(callType, sections),
+        text: buildSystemPrompt(callType, sections, referenceContent),
         // The script text is identical on every request for a given call
         // type + variant, so mark it cacheable. Note: Haiku 4.5's minimum
         // cacheable prefix is 4096 tokens, and a single script usually runs

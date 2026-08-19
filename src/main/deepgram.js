@@ -28,8 +28,10 @@ const BASE_PARAMS = {
 
 // Opens a Deepgram live-transcription connection.
 //   onTranscript({ text, speaker, isFinal })
-//   onError(message)
-//   onClose()
+//   onError(message) — genuine socket errors only (not a plain close)
+//   onClose(wasIntentional) — wasIntentional is true iff our own close()
+//     was called; false means Deepgram closed on us (idle timeout, server
+//     hiccup, etc.) — see liveCall.js for how that's used to reconnect.
 // Returns { send(chunk), close(), ready: Promise<void> }.
 export function connectDeepgram({ onTranscript, onError, onClose, encoding, sampleRate }) {
   if (!process.env.DEEPGRAM_API_KEY) {
@@ -43,6 +45,7 @@ export function connectDeepgram({ onTranscript, onError, onClose, encoding, samp
   }
 
   const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, ['token', process.env.DEEPGRAM_API_KEY])
+  let closing = false // set by our own close() — distinguishes "we hung up" from Deepgram dropping us
 
   const ready = new Promise((resolve, reject) => {
     ws.once('open', resolve)
@@ -72,11 +75,12 @@ export function connectDeepgram({ onTranscript, onError, onClose, encoding, samp
     onError?.(`Deepgram connection error: ${err.message}`)
   })
 
-  ws.on('close', (code) => {
-    if (code !== 1000) {
-      onError?.(`Deepgram disconnected unexpectedly (code ${code}).`)
-    }
-    onClose?.()
+  // Deepgram doesn't reliably echo back code 1000 for a close *we*
+  // initiated (observed code 1005 — "no status received" — for our own
+  // graceful close()s), so a raw code check can't tell intentional apart
+  // from unexpected. Use the `closing` flag we set ourselves instead.
+  ws.on('close', () => {
+    onClose?.(closing)
   })
 
   return {
@@ -85,6 +89,7 @@ export function connectDeepgram({ onTranscript, onError, onClose, encoding, samp
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk)
     },
     close() {
+      closing = true
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'CloseStream' }))
       }

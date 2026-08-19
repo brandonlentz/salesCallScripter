@@ -16,6 +16,12 @@ const api = {
     delete: (callType, id) => ipcRenderer.invoke('scriptVariants:delete', { callType, id }),
     parse: (rawText) => ipcRenderer.invoke('scriptVariants:parse', rawText)
   },
+  nepqReferences: {
+    list: () => ipcRenderer.invoke('nepqReferences:list'),
+    save: (data) => ipcRenderer.invoke('nepqReferences:save', data),
+    delete: (id) => ipcRenderer.invoke('nepqReferences:delete', id),
+    parse: (base64, filename) => ipcRenderer.invoke('nepqReferences:parse', { base64, filename })
+  },
   properties: {
     list: () => ipcRenderer.invoke('properties:list'),
     search: (query) => ipcRenderer.invoke('properties:search', query),
@@ -26,6 +32,13 @@ const api = {
   },
   dialer: {
     call: (phoneNumber) => ipcRenderer.invoke('dialer:call', phoneNumber)
+  },
+  callAnalysis: {
+    analyze: (transcriptText, callType) =>
+      ipcRenderer.invoke('callAnalysis:analyze', { transcriptText, callType })
+  },
+  recordings: {
+    reveal: (dir) => ipcRenderer.invoke('recordings:reveal', dir)
   },
   liveCall: {
     start: (channels, meta) => ipcRenderer.invoke('live-call:start', { channels, ...meta }),

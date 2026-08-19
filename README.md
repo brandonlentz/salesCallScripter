@@ -50,6 +50,29 @@ userData dir — not committed, and not PII, just kept there so adding one never
 and are picked up by both Training Mode and Live Call, since both call the same suggestion
 engine.
 
+## NEPQ Framework Library
+
+Beyond the word-for-word call scripts, the suggestion engine can also be grounded in general
+NEPQ methodology — question patterns, tonality, objection-handling approach — extracted from
+uploaded reference material (e.g. Jeremy Miner NEPQ training PDFs).
+
+- **NEPQ Framework** in the header opens the library drawer. **+ Upload PDF** picks a file, then
+  **Parse PDF** sends it to Claude (native PDF understanding — no separate OCR step) to distill
+  into organized reference notes, shown for review before you save. This is a one-time
+  extraction per document, so it uses a stronger model than the live suggestion engine
+  (`claude-opus-5` in `src/main/parseNepqReference.js` vs. Haiku for live suggestions) —
+  extraction quality here affects every suggestion made afterward.
+- Distillation is deliberate, not a transcription: the parser is instructed to pull out
+  reusable coaching guidance and skip filler/stories, since the result has to fit efficiently
+  into a prompt sent on every suggestion request, not reproduce the whole source document.
+- Unlike script variants, there's no "live" selection — every saved reference is included every
+  time, across all call types, stacked underneath the word-for-word script. The script always
+  stays ground truth for exact wording; reference material only informs style and approach (see
+  `src/main/nepqPrompt.js`).
+- Stored locally (`src/main/nepqReferences.js`, Electron's userData dir) — never committed. This
+  is licensed/proprietary training material, so keep it out of the repo the same way scripts and
+  properties already are.
+
 ## Tech Stack
 
 - **Electron** — macOS desktop shell
@@ -62,65 +85,128 @@ engine.
 
 ## Getting Started
 
+There's no downloadable installer (no `.dmg`/`.app` release) — this runs from a checkout of the
+repo via a couple of `npm` commands. It's a few one-time steps, but nothing beyond copy-paste.
+
 ### Prerequisites
 
-- **macOS**, with calls placed through the built-in **Phone app** (Continuity Calling from an
-  iPhone) so the call audio plays through the Mac
-- **Node.js 18+** and npm (comes with Node) — check with `node -v`
-- An **Anthropic API key** — get one at https://console.anthropic.com/settings/keys
-- A **Deepgram API key** (for live calls only, not Training Mode) — get one at
-  https://console.deepgram.com/
+- **macOS 14.4+** (Sonoma or later), with calls placed through the built-in **Phone app**
+  (Continuity Calling from an iPhone signed into the same Apple ID and nearby) so the call audio
+  plays through the Mac. Check your version: **Apple menu → About This Mac**.
+- **Node.js 18+** and npm (comes with Node) — get it at https://nodejs.org (the LTS installer) if
+  you don't have it, then check with `node -v` in Terminal.
+- **Xcode Command Line Tools** — needed to compile the native audio-capture helper. Run
+  `xcode-select --install` in Terminal if you don't already have them (`xcode-select -p` prints a
+  path if you do).
+- **ffmpeg** — optional, only needed for the single merged call recording (`audio-merged.mp3`).
+  `brew install ffmpeg` if you have [Homebrew](https://brew.sh); everything else works without it.
+- An **Anthropic API key** — get one at https://console.anthropic.com/settings/keys (needed for
+  suggestions, call scoring, script/PDF parsing — most of what makes this app useful).
+- A **Deepgram API key** — get one at https://console.deepgram.com/ (needed for live-call
+  transcription).
 
-### Install
+### 1. Get the code
 
 ```bash
 git clone https://github.com/brandonlentz/salesCallScripter.git
 cd salesCallScripter
-npm install
-cp .env.example .env   # then add ANTHROPIC_API_KEY and DEEPGRAM_API_KEY
 ```
 
-### Run in dev mode
+Or download it as a ZIP from the green **Code** button on GitHub and unzip it, if you don't want
+to use git directly — then `cd` into the unzipped folder in Terminal for every step below.
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Add your API keys
+
+```bash
+cp .env.example .env
+```
+
+Open the new `.env` file in any text editor and fill in both keys from the Prerequisites above:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+DEEPGRAM_API_KEY=...
+```
+
+`.env` is gitignored — your keys never get committed, even if you later push changes.
+
+### 4. Build the native audio-capture helper (one time)
+
+```bash
+npm run build:audiotap
+```
+
+This compiles `native/audiotap` (see [Live Call](#live-call) below for what it does). Only needs
+re-running if you edit that Swift code — not part of the normal dev loop.
+
+### 5. Run it
 
 ```bash
 npm run dev
 ```
 
-This starts the Vite dev server and launches the Electron app pointed at it, with hot reload
-on the renderer.
+This opens the app window. Leave the Terminal window open while you use the app (it's running the
+dev server); `Ctrl-C` there, or just quit the app window, to stop.
 
-### Build a production bundle
+**First-run checklist**, both one-time macOS permission prompts:
+
+- The first time you dial, macOS asks to approve microphone access — allow it.
+- The first time the native audio tap actually captures a call, macOS asks to approve audio
+  capture under **System Settings → Privacy & Security → Screen & System Audio Recording** —
+  allow it there too (find "Electron" in that list if it's not an immediate popup).
+
+After that, every call just works — see [Live Call](#live-call) below for how it's actually used.
+
+### Everyday use after the first setup
+
+Once steps 1-4 are done, starting the app again is just:
 
 ```bash
-npm run build
+cd salesCallScripter   # if you're not already there
+npm run dev
 ```
 
-Output goes to `out/`. Run the built app with:
+### Updating to a newer version later
 
 ```bash
-npm run preview
+git pull
+npm install   # only strictly needed if dependencies changed
 ```
 
 ### Local-only data
 
-`transcripts/`, `data/`, and `recordings/` are gitignored — they're meant to hold real seller
-call transcripts, audio recordings, and related data locally for development/reference, and
-shouldn't be committed since they contain customer PII.
+`transcripts/`, `data/`, `recordings/`, and `.env` are all gitignored — real seller call
+transcripts, audio recordings, and your API keys stay on your machine only, never committed.
+
+### Building a standalone bundle (advanced, optional)
+
+`npm run build` produces a production bundle in `out/`, run with `npm run preview` — same app,
+without the dev server/hot-reload. This is **not** a distributable double-click `.app` (no
+packaging/code-signing is set up for that yet) — for day-to-day use, `npm run dev` is the normal
+path.
 
 ## Using the app
 
-- **Training / Live Call** toggle (top right) switches between replaying a saved transcript and
-  an actual live call.
 - **Call type** selector picks which script drives the stage tracker and suggestion engine —
   Intro, Offer, or Associate.
-- **Script** button opens a drawer with the full word-for-word script for the current call
-  type, auto-scrolled to whichever stage the suggestion engine thinks the call is in.
+- **Script** panel (left column) shows the full word-for-word script for the current call type
+  the whole time — no drawer to open, it's in view for the entire conversation — auto-scrolled
+  to whichever stage the suggestion engine thinks the call is in.
 - **Property** button opens a drawer for picking which property/lead the current call is
-  about — see [Property Context](#property-context) below. Works the same in Training and Live
-  Call mode.
+  about — see [Property Context](#property-context) below.
 - **Stage tracker** (below the header) highlights the current stage of that script.
 - **Live Transcript** / **Suggested Next Lines** panels show the call so far and the engine's
   suggested next lines, pulled from the script.
+
+Training Mode (replaying a saved transcript against the suggestion engine, no live call needed)
+is temporarily disabled — the code is still there (`src/renderer/src/TrainingPanel.jsx`), just
+not wired into the header/layout right now.
 
 ## Property Context
 
@@ -172,9 +258,15 @@ contact has its own list of `{ number, label }` phones, not one flat name/phone 
 
 Clicking any **📞** button hands off to macOS's `tel:` handler (the Phone app / Continuity Dialer
 — the same app this whole live-call setup already routes audio through, so nothing new to
-configure) to actually place the call, selects that property as the call's context, and switches
-the app to Live Call mode. Since the call is dialed *from* that contact's own saved number, the
-app already knows who you're calling — no caller-ID detection needed.
+configure) to actually place the call, and starts the Live Call panel automatically — see
+[Using it — every call is captured automatically](#using-it--every-call-is-captured-automatically)
+above. Since the call is dialed *from* that specific contact's own saved number, the app already
+knows exactly who you're calling — no caller-ID detection needed — and passes that contact's name
+and relationship to the suggestion engine as `YOU ARE CALLING: ...` (see `buildPropertyContext` in
+`src/main/nepqPrompt.js`), not just the property in general. That matters once a property has
+several contacts, each with several numbers, and the script has a `[NAME]`-style placeholder to
+fill in. If a call ever starts without a specific contact selected (e.g. you pick a property but
+don't click a numbered contact), nothing is guessed — the placeholder stays a placeholder.
 
 Entries are stored locally (`src/main/properties.js`, Electron's userData dir — outside the repo,
 never committed, since they're seller PII) and are editable/deletable from the same drawer.
@@ -220,31 +312,60 @@ Setup:
 
 If the helper isn't built yet, or macOS denies the permission, the panel will show what went wrong.
 
-### Using it
+### Using it — recording starts automatically, ends with one click
 
-1. Switch to **Live Call** mode, pick the right **Call type**, and click **Start Call**. macOS
-   will prompt for microphone access the first time.
+There's no manual "start recording" step: clicking any phone number (in **Property**, see below)
+starts the Live Call panel for you — dial, and transcription/recording are already running by the
+time the other person picks up. **Start Call** still exists as a manual override (e.g. if you
+dial outside the app).
+
+**Ending is manual — click End Call when you hang up.** An earlier version tried to
+auto-detect hangup from the tapped audio going quiet, but macOS doesn't expose real call-state to
+third-party apps, so that was a heuristic guess — and a real, long silence (a rep on hold, a long
+thinking pause) would have ended the call early. One click is simpler and never wrong.
+
+1. Pick the right **Call type** before dialing (or after — the suggestion engine picks it up
+   either way). Dial a contact's number from **Property** — see [Property Context](#property-context).
 2. Transcribed lines appear labeled **You** / **Them** — exact, no guessing.
 3. Suggestions auto-request after the prospect speaks (toggle this off if you'd rather trigger
    them manually with **Get Suggestions Now** — each request calls the Claude API).
-4. **End Call** stops the mic and closes the Deepgram connection(s). **Clear** resets the
-   transcript before your next call.
+4. Click **End Call** when you hang up — the **Live Transcript** panel clears for the next call,
+   and the [Call Summary popup](#call-summary) below appears.
 
 ### Recordings
 
-Every live call is automatically recorded to `recordings/<call type>/<timestamp>[-property
-label]/` — `audio-rep.webm` + `audio-prospect.raw` (the prospect channel is headerless PCM from
-the native tap, not webm), `transcript.txt`, and `meta.json` (call type, matched property if one
-was selected, start/end time). The **● Recording** indicator next to the status line confirms
-it's active; if the recording itself fails to start (e.g. a disk issue), the call still proceeds
-— transcription and coaching aren't affected — but an error banner will say so, since that call
-went unrecorded.
+Every call is automatically recorded to `recordings/<call type>/<timestamp>[-property label]/` —
+`audio-rep.webm` + `audio-prospect.raw` (the prospect channel is headerless PCM from the native
+tap, not webm), `transcript.txt`, and `meta.json` (call type, matched property if one was
+selected, start/end time). This happens even for a misdial or no-answer — you just get a short or
+empty transcript. The **● Recording** indicator next to the status line confirms it's active; if
+the recording itself fails to start (e.g. a disk issue), the call still proceeds — transcription
+and coaching aren't affected — but an error banner will say so, since that call went unrecorded.
 
 **Calls also get a single merged file, `audio-merged.mp3`** — the two mono channels combined into
 one stereo file (you on the left channel, the prospect on the right), for actually listening back
 to a call instead of juggling two files. Requires **ffmpeg** on your PATH (`brew install ffmpeg`);
 if it's missing, or the merge otherwise fails, the two per-channel files are still saved — you'll
 just get an error banner and no `audio-merged.mp3` for that call.
+
+## Call Summary
+
+A popup (`src/renderer/src/CallSummaryModal.jsx`) appears automatically the moment you click
+**End Call**:
+
+- Confirms the recording was saved, with a **Show in Finder** link to the call's folder.
+- If any conversation was actually captured, Claude grades the rep's performance 1-10 against
+  Jeremy Miner's NEPQ framework (using any uploaded [NEPQ Framework Library](#nepq-framework-library)
+  material to inform the grading criteria, same as live suggestions) — a short summary, what went
+  well, what went poorly, and specific things to work on next time (`src/main/callAnalysis.js`).
+  A misdial/no-answer with nothing said just skips grading and says so.
+- Uses `claude-opus-5` rather than the Haiku model live suggestions use — this runs once per call,
+  not on the live-call latency path, so it's worth the stronger model for coaching-quality
+  feedback. Every call now triggers one of these requests, so this is a real per-call cost, not a
+  one-time setup cost like the NEPQ PDF parsing — worth knowing since it scales with call volume.
+
+Requires `ANTHROPIC_API_KEY` — without it, the popup shows an error instead of a graded summary
+(the recording is unaffected either way).
 
 Like `transcripts/` and `data/`, this folder is gitignored and local-only (real seller PII plus
 call audio). **Check your state's call-recording consent law before relying on this** — Texas
@@ -278,6 +399,10 @@ Requires `DEEPGRAM_API_KEY` in `.env` — without it, **Start Call** shows a cle
 of connecting.
 
 ## Training Mode
+
+**Currently disabled in the UI** — not removed, just not wired into the header/layout for now
+(see [Using the app](#using-the-app) above). The code below is accurate for whenever it's
+switched back on.
 
 The app can also replay any saved transcript from `transcripts/intro/` or `transcripts/offer/`
 line by line to simulate a live call, without needing a real call or microphone. It runs

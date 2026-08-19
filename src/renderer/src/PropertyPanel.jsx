@@ -101,12 +101,16 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
   }
 
   // Dials via the OS (macOS's tel: handler — the Phone app) and hands the
-  // property off to App.jsx to select as call context + switch to Live
-  // Call mode. We already know who this number belongs to — both which
+  // property AND the specific contact off to App.jsx to select as call
+  // context. We already know who this number belongs to — both which
   // contact and which of their numbers — because we're the one placing
   // the call, from this property's own record. No caller-ID lookup needed.
-  function handleCall(property, phoneNumber) {
-    onCall(property)
+  // That contact then grounds the suggestion engine in their actual name,
+  // not just the property in general (see buildPropertyContext in
+  // nepqPrompt.js) — important since one property can have several
+  // contacts, each with several numbers.
+  function handleCall(property, contact, phoneNumber) {
+    onCall(property, contact)
     window.api.dialer.call(phoneNumber)
   }
 
@@ -219,7 +223,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                                 <button
                                   key={pi}
                                   type="button"
-                                  onClick={() => handleCall(selected, p.number)}
+                                  onClick={() => handleCall(selected, c, p.number)}
                                   title={p.label ? `${p.number} (${p.label})` : p.number}
                                 >
                                   📞 {p.number}
@@ -273,7 +277,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                         {first && (
                           <button
                             type="button"
-                            onClick={() => handleCall(p, first.phone.number)}
+                            onClick={() => handleCall(p, first.contact, first.phone.number)}
                             title={`Call ${first.contact.name || 'contact'}: ${first.phone.number}`}
                           >
                             📞{phones.length > 1 ? ` (${phones.length})` : ''}

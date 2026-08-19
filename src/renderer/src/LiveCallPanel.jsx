@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import CallSummaryModal from './CallSummaryModal'
 
 // Deepgram only marks a channel entry final at a genuine pause, so there's
 // little upside in waiting long after that to ask for suggestions — every
@@ -22,7 +23,15 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 300
 // BlackHole is no longer installed on the dev machine and turned out to be
 // actively harmful (interfered with real call audio), and native tap
 // supersedes both once its target-process bug was fixed.
-export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property }) {
+//
+// Starting is automatic, no manual Start Call needed: App.jsx bumps
+// `dialSignal` the moment you click a phone number (see PropertyPanel/
+// App.jsx's handleCall), which the effect below turns into a start() call.
+// Ending is deliberately still manual (End Call) — an earlier attempt at
+// auto-detecting hangup from a volume heuristic in liveCall.js risked
+// ending a call early during a real, long silence (a rep on hold, a long
+// thinking pause), which is worse than requiring one click.
+export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property, dialSignal }) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
@@ -34,6 +43,9 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   // override in edge cases.
   const [nativeProcessName, setNativeProcessName] = useState('')
   const [audiotapStatus, setAudiotapStatus] = useState('')
+  // Post-call popup (see CallSummaryModal.jsx) — status: 'loading' | 'ready'
+  // | 'error' | 'empty' (no conversation captured, e.g. a misdial).
+  const [summary, setSummary] = useState({ open: false, recordingDir: null, status: 'idle', error: '', analysis: null })
 
   const recordersRef = useRef({}) // channel -> MediaRecorder
   const streamsRef = useRef({}) // channel -> MediaStream, call-scoped (torn down on stop())
@@ -52,6 +64,27 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   useEffect(() => {
     transcriptTextRef.current = transcriptText
   }, [transcriptText])
+
+  // Guards stop() against a double-fire (e.g. mashing End Call, or a
+  // dialSignal-triggered start() racing a manual stop()) — a ref rather
+  // than reading `status` directly since stop() can be called from a
+  // closure captured at an earlier render than the current one.
+  const statusRef = useRef(status)
+  useEffect(() => {
+    statusRef.current = status
+  }, [status])
+
+  // Auto-start on dial — see the component doc comment above. Skips the
+  // very first render (dialSignalRef starts equal to the initial prop) so
+  // mounting the panel doesn't itself start a call.
+  const dialSignalRef = useRef(dialSignal)
+  useEffect(() => {
+    if (dialSignal === undefined || dialSignal === dialSignalRef.current) return
+    dialSignalRef.current = dialSignal
+    if (status === 'idle') start()
+    // Only dialSignal should retrigger this — status is read, not reacted to.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialSignal])
 
   function appendEntry(speaker, text) {
     setEntries((prev) => [...prev, { speaker, text }])
@@ -133,6 +166,9 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   }
 
   async function stop() {
+    if (statusRef.current === 'idle') return // guards against a double-fire (see the ref's comment above)
+    statusRef.current = 'idle'
+
     Object.values(recordersRef.current).forEach((r) => r.stop())
     Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
     recordersRef.current = {}
@@ -140,9 +176,30 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     clearTimeout(debounceRef.current)
     unsubscribeRef.current.forEach((off) => off())
     unsubscribeRef.current = []
-    await window.api.liveCall.stop(transcriptTextRef.current)
+
+    // Read the final transcript before clearing it — the call itself is
+    // still saved to disk in full either way (see recording.js), this only
+    // resets what's shown on screen for the next call.
+    const finalTranscript = transcriptTextRef.current
+    const { dir } = await window.api.liveCall.stop(finalTranscript)
     setStatus('idle')
     setInterimText('')
+    setEntries([])
+
+    // Post-call popup (see CallSummaryModal.jsx) — every call gets one,
+    // including a misdial/no-answer (nothing to grade, but still confirms
+    // the recording).
+    if (!finalTranscript.trim()) {
+      setSummary({ open: true, recordingDir: dir, status: 'empty', error: '', analysis: null })
+      return
+    }
+    setSummary({ open: true, recordingDir: dir, status: 'loading', error: '', analysis: null })
+    try {
+      const analysis = await window.api.callAnalysis.analyze(finalTranscript, callType)
+      setSummary({ open: true, recordingDir: dir, status: 'ready', error: '', analysis })
+    } catch (err) {
+      setSummary({ open: true, recordingDir: dir, status: 'error', error: err.message, analysis: null })
+    }
   }
 
   function handleClear() {
@@ -173,12 +230,13 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
       </label>
 
       <p className="panel__hint">
-        No device setup needed — your mic uses the system default, and your normal
-        speakers/headset keep working the whole time (native audio tap, see{' '}
-        <code>native/audiotap</code>). The first time this runs, macOS will ask you to approve
-        audio capture (System Settings → Privacy &amp; Security → Screen &amp; System Audio
-        Recording). If the helper isn&apos;t built yet, run <code>npm run build:audiotap</code>{' '}
-        from the project root.
+        Every call is recorded and transcribed automatically — dialing a number starts this
+        panel for you. Click <strong>End Call</strong> below when you hang up. No device setup
+        needed — your mic uses the system default, and your normal speakers/headset keep working
+        the whole time (native audio tap, see <code>native/audiotap</code>). The first time this
+        runs, macOS will ask you to approve audio capture (System Settings → Privacy &amp;
+        Security → Screen &amp; System Audio Recording). If the helper isn&apos;t built yet, run{' '}
+        <code>npm run build:audiotap</code> from the project root.
       </p>
 
       {error && <p className="panel__error">{error}</p>}
@@ -221,6 +279,15 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
         {status === 'live' && ' · ● Recording'}
         {entries.length > 0 && ` · ${entries.length} lines`}
       </p>
+
+      <CallSummaryModal
+        open={summary.open}
+        recordingDir={summary.recordingDir}
+        status={summary.status}
+        error={summary.error}
+        analysis={summary.analysis}
+        onClose={() => setSummary((s) => ({ ...s, open: false }))}
+      />
     </section>
   )
 }

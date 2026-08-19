@@ -23,19 +23,31 @@ const NATIVE_TAP_CHANNEL_FORMAT = {
 // Every call is also recorded to disk (see recording.js) — the same audio
 // chunks already flowing to Deepgram are appended to per-channel files as
 // they arrive, so this adds no extra IPC traffic.
+//
+// Ending is manual only (End Call in the UI) — an earlier version tried to
+// auto-detect hangup from a volume heuristic, but that risked ending a call
+// early during a real, long silence (a rep on hold, a long thinking pause),
+// which is worse than just requiring one click. Starting stays automatic —
+// see LiveCallPanel.jsx's dialSignal handling — only ending was reverted.
 export function registerLiveCallHandlers(getMainWindow, appRootDir) {
   const connections = new Map()
   let recording = null
   let audioTap = null
   let callActive = false
+  // Channels currently in a reconnect-failure streak — used to alert the UI
+  // once when reconnecting starts failing, not on every retry (a real outage
+  // would otherwise spam an error every second).
+  const reconnectFailing = new Set()
 
   // Opens (or re-opens) a Deepgram connection for one channel and registers it in
-  // `connections`. On an unexpected close while the call is still active, retries
-  // after a short delay rather than leaving the channel silently dead — Deepgram
-  // closes idle connections after ~10-12s with no audio, and in native-tap mode
-  // the 'prospect' connection opens as soon as the call starts but can sit idle
-  // while the phone is still ringing, before real caller audio arrives. Mirrors
-  // the respawn pattern audioTap.js already uses for the native helper itself.
+  // `connections`. Deepgram routinely closes connections that aren't our own
+  // doing — e.g. it closes idle connections after ~10-12s with no audio, and
+  // in native-tap mode the 'prospect' connection opens as soon as the call
+  // starts but can sit idle while the phone is still ringing, before real
+  // caller audio arrives. These are expected and silently recovered (retried
+  // after a short delay, mirroring the respawn pattern audioTap.js already
+  // uses for the native helper) — only a reconnect that itself fails reaches
+  // the UI, since that's the case that actually needs the rep's attention.
   async function openChannel(channel, options) {
     const connection = connectDeepgram({
       onTranscript: (payload) => getMainWindow()?.webContents.send('live-call:transcript', { channel, ...payload }),
@@ -43,15 +55,16 @@ export function registerLiveCallHandlers(getMainWindow, appRootDir) {
         console.error(`[deepgram ${channel}] error:`, message)
         getMainWindow()?.webContents.send('live-call:error', `[${channel}] ${message}`)
       },
-      onClose: () => {
-        console.log(`[deepgram ${channel}] closed`)
+      onClose: (wasIntentional) => {
+        console.log(`[deepgram ${channel}] closed${wasIntentional ? ' (intentional)' : ' unexpectedly'}`)
         connections.delete(channel)
-        if (callActive) setTimeout(() => reconnectChannel(channel, options), 1000)
+        if (callActive && !wasIntentional) setTimeout(() => reconnectChannel(channel, options), 1000)
       },
       ...options
     })
     await connection.ready
     connections.set(channel, connection)
+    reconnectFailing.delete(channel) // a successful (re)connect clears any earlier failure streak
     return connection
   }
 
@@ -60,6 +73,13 @@ export function registerLiveCallHandlers(getMainWindow, appRootDir) {
     console.log(`[deepgram ${channel}] reconnecting`)
     openChannel(channel, options).catch((err) => {
       console.error(`[deepgram ${channel}] reconnect failed:`, err.message)
+      if (!reconnectFailing.has(channel)) {
+        reconnectFailing.add(channel)
+        getMainWindow()?.webContents.send(
+          'live-call:error',
+          `[${channel}] Lost connection and could not reconnect: ${err.message}`
+        )
+      }
       if (callActive) setTimeout(() => reconnectChannel(channel, options), 1000)
     })
   }
@@ -68,6 +88,7 @@ export function registerLiveCallHandlers(getMainWindow, appRootDir) {
     'live-call:start',
     async (_event, { channels, callType, property, nativeAudioTap }) => {
       console.log('[live-call:start]', { channels, callType, nativeAudioTap })
+      reconnectFailing.clear()
       const opened = []
       try {
         for (const channel of channels) {
@@ -153,16 +174,17 @@ export function registerLiveCallHandlers(getMainWindow, appRootDir) {
     for (const connection of connections.values()) connection.close()
     connections.clear()
 
-    if (recording) {
-      const activeRecording = recording
-      recording = null
-      const { mergeError } = await activeRecording.finish({ transcriptText })
-      if (mergeError) {
-        getMainWindow()?.webContents.send(
-          'live-call:error',
-          `Recording saved, but merging into one file failed: ${mergeError}`
-        )
-      }
+    if (!recording) return { dir: null, mergeError: null }
+
+    const activeRecording = recording
+    recording = null
+    const { dir, mergeError } = await activeRecording.finish({ transcriptText })
+    if (mergeError) {
+      getMainWindow()?.webContents.send(
+        'live-call:error',
+        `Recording saved, but merging into one file failed: ${mergeError}`
+      )
     }
+    return { dir, mergeError }
   })
 }

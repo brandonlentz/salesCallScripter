@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CALL_TYPES, CALL_SCRIPTS, getStages } from '../../shared/callScripts.js'
-import TrainingPanel from './TrainingPanel'
 import LiveCallPanel from './LiveCallPanel'
 import ScriptPanel from './ScriptPanel'
 import PropertyPanel from './PropertyPanel'
 import ScriptVariantPanel from './ScriptVariantPanel'
+import NepqReferencePanel from './NepqReferencePanel'
 
 const ORIGINAL_VARIANT = { id: 'original', label: 'Original' }
 
@@ -16,14 +16,22 @@ const initialSuggestionState = {
   suggestions: []
 }
 
+// Training Mode (replaying a saved transcript against the suggestion
+// engine, no live call needed — see TrainingPanel.jsx/trainingTranscripts.js)
+// is disabled for now, not removed — the toggle and TrainingPanel usage
+// were pulled out of the header/layout below, but the component, its IPC
+// handlers, and the transcripts on disk are all still intact for whenever
+// it comes back.
 function App() {
-  const [mode, setMode] = useState('training') // 'training' | 'live'
   const [callType, setCallType] = useState('intro')
   const [transcriptText, setTranscriptText] = useState('')
   const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
-  const [scriptOpen, setScriptOpen] = useState(false)
   const [selectedProperty, setSelectedProperty] = useState(null)
   const [propertyOpen, setPropertyOpen] = useState(false)
+  // Bumped on every dial (see handleCall below) — LiveCallPanel watches this
+  // to auto-start recording/transcription the moment a number is clicked,
+  // instead of requiring a separate manual "Start Call".
+  const [dialSignal, setDialSignal] = useState(0)
 
   // Script variants (lightweight split-testing) — see scriptVariants.js.
   // `variants` is the list for the current call type (seeded with the
@@ -35,6 +43,7 @@ function App() {
   const [variants, setVariants] = useState([ORIGINAL_VARIANT])
   const [variantSections, setVariantSections] = useState(null)
   const [variantPanelOpen, setVariantPanelOpen] = useState(false)
+  const [nepqPanelOpen, setNepqPanelOpen] = useState(false)
 
   const refreshVariants = useCallback(() => {
     window.api.scriptVariants.list(callType).then(setVariants)
@@ -90,21 +99,17 @@ function App() {
     setSuggestionState(initialSuggestionState)
   }
 
-  function handleModeChange(next) {
-    if (next === mode) return
-    setMode(next)
-    setTranscriptText('')
-    setSuggestionState(initialSuggestionState)
-  }
-
-  // Click-to-call: select the property as call context and jump straight
-  // to Live Call mode, since that's the obvious next screen once you've
-  // dialed. Dialing itself (and picking the call type) is handled in
-  // PropertyPanel/LiveCallPanel.
-  function handleCall(property) {
-    setSelectedProperty(property)
-    handleModeChange('live')
+  // Click-to-call: select the property AND the specific contact/number
+  // dialed (PropertyPanel already knows both, since it's the one placing
+  // the call) as call context. `contact` grounds the suggestion engine in
+  // exactly who's on the line — see buildPropertyContext in nepqPrompt.js —
+  // rather than just the property in general, which matters once a
+  // property has more than one contact or a contact has more than one
+  // number. Dialing itself is handled in PropertyPanel.
+  function handleCall(property, contact) {
+    setSelectedProperty(contact ? { ...property, activeContact: contact } : property)
     setPropertyOpen(false)
+    setDialSignal((n) => n + 1)
   }
 
   const stages = getStages(callType, activeSections)
@@ -118,22 +123,6 @@ function App() {
           <p className="app__subtitle">NEPQ live-call teleprompter</p>
         </div>
         <div className="app__header-controls">
-          <div className="mode-toggle">
-            <button
-              type="button"
-              className={mode === 'training' ? 'is-active' : ''}
-              onClick={() => handleModeChange('training')}
-            >
-              Training
-            </button>
-            <button
-              type="button"
-              className={mode === 'live' ? 'is-active' : ''}
-              onClick={() => handleModeChange('live')}
-            >
-              Live Call
-            </button>
-          </div>
           <label className="field field--inline">
             <span>Call type</span>
             <select value={callType} onChange={(e) => handleCallTypeChange(e.target.value)}>
@@ -157,8 +146,8 @@ function App() {
           <button type="button" onClick={() => setVariantPanelOpen(true)}>
             Manage Scripts
           </button>
-          <button type="button" onClick={() => setScriptOpen(true)}>
-            Script
+          <button type="button" onClick={() => setNepqPanelOpen(true)}>
+            NEPQ Framework
           </button>
           <button type="button" onClick={() => setPropertyOpen(true)}>
             {selectedProperty ? `Property: ${selectedProperty.label}` : 'Property'}
@@ -178,14 +167,14 @@ function App() {
       </nav>
 
       <main className="app__main">
+        <ScriptPanel callType={callType} activeStage={activeStage} sections={activeSections} />
+
         <section className="panel panel--transcript">
           <h2>Live Transcript</h2>
           {transcriptText ? (
             <pre className="panel__transcript">{transcriptText}</pre>
           ) : (
-            <p className="panel__placeholder">
-              Nothing yet. {mode === 'training' ? 'Load a transcript' : 'Start a call'} below.
-            </p>
+            <p className="panel__placeholder">Nothing yet. Start a call below.</p>
           )}
         </section>
 
@@ -197,8 +186,7 @@ function App() {
             !suggestionState.error &&
             suggestionState.suggestions.length === 0 && (
               <p className="panel__placeholder">
-                No suggestions yet. {mode === 'training' ? 'Play a transcript' : 'Start a call'} or
-                click &ldquo;Get Suggestions Now&rdquo;.
+                No suggestions yet. Start a call or click &ldquo;Get Suggestions Now&rdquo;.
               </p>
             )}
           {suggestionState.stageRationale && (
@@ -214,28 +202,12 @@ function App() {
         </section>
       </main>
 
-      {mode === 'training' ? (
-        <TrainingPanel
-          callType={callType}
-          onCallTypeChange={handleCallTypeChange}
-          onTranscriptChange={setTranscriptText}
-          onSuggestions={requestSuggestions}
-        />
-      ) : (
-        <LiveCallPanel
-          onTranscriptChange={setTranscriptText}
-          onSuggestions={requestSuggestions}
-          callType={callType}
-          property={selectedProperty}
-        />
-      )}
-
-      <ScriptPanel
-        open={scriptOpen}
-        onClose={() => setScriptOpen(false)}
+      <LiveCallPanel
+        onTranscriptChange={setTranscriptText}
+        onSuggestions={requestSuggestions}
         callType={callType}
-        activeStage={activeStage}
-        sections={activeSections}
+        property={selectedProperty}
+        dialSignal={dialSignal}
       />
 
       <PropertyPanel
@@ -262,6 +234,8 @@ function App() {
         }}
         onChanged={refreshVariants}
       />
+
+      <NepqReferencePanel open={nepqPanelOpen} onClose={() => setNepqPanelOpen(false)} />
     </div>
   )
 }

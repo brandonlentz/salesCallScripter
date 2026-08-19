@@ -14,6 +14,9 @@ import {
 import { parsePropertyText } from './parseProperty.js'
 import { listVariants, getVariant, saveVariant, deleteVariant } from './scriptVariants.js'
 import { parseScriptVariant } from './parseScriptVariant.js'
+import { listReferences, saveReference, deleteReference } from './nepqReferences.js'
+import { parseNepqReference } from './parseNepqReference.js'
+import { analyzeCall } from './callAnalysis.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -31,8 +34,6 @@ function createWindow() {
     height: 700,
     show: false,
     autoHideMenuBar: true,
-    // Keep the teleprompter on top of a video call / browser during a live call.
-    alwaysOnTop: true,
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       sandbox: false
@@ -66,6 +67,19 @@ function registerIpcHandlers() {
   ipcMain.handle('scriptVariants:save', (_event, { callType, data }) => saveVariant(callType, data))
   ipcMain.handle('scriptVariants:delete', (_event, { callType, id }) => deleteVariant(callType, id))
   ipcMain.handle('scriptVariants:parse', (_event, rawText) => parseScriptVariant(rawText))
+  ipcMain.handle('nepqReferences:list', () => listReferences())
+  ipcMain.handle('nepqReferences:save', (_event, data) => saveReference(data))
+  ipcMain.handle('nepqReferences:delete', (_event, id) => deleteReference(id))
+  ipcMain.handle('nepqReferences:parse', (_event, { base64, filename }) => parseNepqReference(base64, filename))
+  ipcMain.handle('callAnalysis:analyze', (_event, { transcriptText, callType }) =>
+    analyzeCall(transcriptText, callType)
+  )
+  // Opens the recording's folder in Finder — "reveal" not "open the file",
+  // so the rep lands on the whole call's files (transcript, merged audio,
+  // meta.json), not just one of them.
+  ipcMain.handle('recordings:reveal', (_event, dir) => {
+    if (dir) shell.showItemInFolder(dir)
+  })
   ipcMain.handle('properties:list', () => listProperties())
   ipcMain.handle('properties:search', (_event, query) => searchProperties(query))
   ipcMain.handle('properties:save', (_event, data) => saveProperty(data))

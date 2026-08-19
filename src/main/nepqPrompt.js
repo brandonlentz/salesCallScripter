@@ -6,6 +6,23 @@ function formatScript(sections) {
     .join('\n\n')
 }
 
+// Renders uploaded NEPQ framework notes (see nepqReferences.js) as a
+// clearly-secondary section — informs question style, tonality, and
+// objection-handling approach, but never overrides the script above, which
+// stays the single source of truth for exact wording. Empty string (no
+// extra section at all) when nothing's been uploaded, so callers who never
+// touch this feature see the exact same prompt as before it existed.
+function formatReferenceSection(referenceContent) {
+  if (!referenceContent?.length) return ''
+  return `
+SUPPLEMENTARY NEPQ FRAMEWORK NOTES (uploaded reference material — use this to inform question \
+style, tonality, and how you handle objections; it does NOT override the SCRIPT above, which \
+remains ground truth for exact wording):
+
+${referenceContent.join('\n\n---\n\n')}
+`
+}
+
 // System prompt for the suggestion engine, one per call type/script variant.
 // Built around Jeremy Miner's NEPQ (Neuro-Emotional Persuasion Questioning)
 // principles — lead with curiosity, uncover pain before pitching, let
@@ -15,8 +32,11 @@ function formatScript(sections) {
 //
 // `sections` is a script variant's own sections (see scriptVariants.js),
 // defaulting to the builtin script so callers that haven't been updated to
-// pass a variant explicitly keep working.
-export function buildSystemPrompt(callType, sections = CALL_SCRIPTS[callType]) {
+// pass a variant explicitly keep working. `referenceContent` is an array of
+// distilled NEPQ framework notes from uploaded PDFs (see
+// nepqReferences.js/parseNepqReference.js) — general methodology that
+// applies across all call types, supplementary to the word-for-word script.
+export function buildSystemPrompt(callType, sections = CALL_SCRIPTS[callType], referenceContent = []) {
   const stageIds = getStageIds(callType, sections)
 
   return `You are a real-time sales call coach for a rep at Pickle Deeds (pickledeeds.com), a \
@@ -34,7 +54,7 @@ phrasing. Where the script calls for silence or a pause, say so explicitly in th
 SCRIPT:
 
 ${formatScript(sections)}
-
+${formatReferenceSection(referenceContent)}
 You will be given the rolling transcript of the live call, oldest to newest. It may be raw \
 speech-to-text output without speaker labels or punctuation cleanup — do your best to infer \
 who said what from context and how far into the script they've gotten.
@@ -62,6 +82,16 @@ into a single suggestion.`
 // user message instead. Putting it in the system prompt would change the
 // system prompt on every property switch and invalidate the prompt cache
 // that's keyed on the script text being byte-identical call to call.
+//
+// `property.activeContact` (set by App.jsx's handleCall, from which
+// contact/number the rep actually clicked to dial — see PropertyPanel.jsx)
+// is called out first and explicitly, since a property can have several
+// contacts each with several numbers — without this the engine has no way
+// to know which one is actually on the line right now. When it's missing
+// (call started without click-to-call, or no property selected at all),
+// there's deliberately no guess here — buildSystemPrompt's existing
+// [PLACEHOLDER]-filling instruction is what keeps the script honest in
+// that case rather than inventing a name.
 export function buildPropertyContext(property) {
   if (!property) return ''
 
@@ -70,13 +100,21 @@ export function buildPropertyContext(property) {
     if (value) lines.push(`${label}: ${value}`)
   }
 
+  if (property.activeContact) {
+    const c = property.activeContact
+    const who = [c.name, c.relationship].filter(Boolean).join(' — ')
+    lines.push(
+      `YOU ARE CALLING: ${who || '(name unknown — use a script placeholder like [NAME], do not guess)'}`
+    )
+  }
+
   for (const contact of property.contacts ?? []) {
     const who = [contact.name, contact.relationship].filter(Boolean).join(' — ')
     const numbers = (contact.phones ?? [])
       .map((p) => (p.label ? `${p.number} (${p.label})` : p.number))
       .join(', ')
     if (who || numbers) {
-      lines.push(`Contact: ${[who, numbers].filter(Boolean).join(' — ')}`)
+      lines.push(`Known contact for this property: ${[who, numbers].filter(Boolean).join(' — ')}`)
     }
   }
   field('Deceased owner', property.deceasedName)
