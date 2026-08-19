@@ -10,3 +10,8 @@ out/
 transcripts/
 data/
 recordings/
+
+# Compiled native helper — rebuilt locally via `npm run build:audiotap`
+# (requires Xcode Command Line Tools, so not something CI/other machines
+# can just check out and run).
+native/audiotap/build/

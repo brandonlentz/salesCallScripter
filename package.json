@@ -10,7 +10,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "start": "electron-vite preview"
+    "start": "electron-vite preview",
+    "build:audiotap": "native/audiotap/build.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

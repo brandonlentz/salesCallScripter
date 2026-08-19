@@ -57,6 +57,8 @@ engine.
 - **Deepgram** — live speech-to-text with speaker diarization
 - **Claude API** (Haiku 4.5) — real-time suggestion engine, grounded in the call scripts above,
   tuned for low latency (see [Suggestion latency](#suggestion-latency) below)
+- **Swift / Core Audio** ([native/audiotap](native/audiotap)) — native macOS process-tap helper
+  for caller-audio capture without a virtual audio device (see [Live Call](#live-call) below)
 
 ## Getting Started
 
@@ -195,50 +197,34 @@ created.
 
 ## Live Call
 
-Two ways to capture call audio — the app supports both, and picks whichever you've set up via
-the device pickers in the Live Call panel.
+Call audio is captured via **native audio capture**: a native Core Audio process-tap
+([native/audiotap](native/audiotap)) that reads the call app's audio directly — no virtual audio
+driver, no system Output switching. Your speakers/headset and mic just stay on whatever your Mac's
+normal defaults are; there's nothing to pick or configure. Speaker labels are exact (your mic is
+its own channel, the tapped call audio is the other), no diarization guessing involved.
 
-### Option A: Single-mic mode (works today, no extra setup)
+(BlackHole-based dual-stream and single-mic acoustic-pickup modes were tried earlier and removed
+— BlackHole in particular turned out to interfere with real call audio on macOS. See project memory
+if you're digging into that history.)
 
-Dial out through the macOS **Phone app** with the call on **speaker** — not headphones or
-AirPods. The built-in mic naturally picks up both your voice and the prospect's, and
-Deepgram's diarization guesses which parts are which. Leave **Caller audio** set to "None" in
-the Live Call panel. Quality depends on room acoustics (quiet room, Mac speaker/mic both near
-you).
+Setup:
 
-### Option B: Dual-stream mode (recommended — exact speaker separation, works with headphones)
+1. One-time build: `npm run build:audiotap` (requires Xcode Command Line Tools — `xcode-select
+   --install` if you don't already have them).
+2. That's it — click **Start Call**. The **Process name override** field in the Live Call panel is
+   an advanced/debug option only; leave it blank (it auto-detects the daemon that actually renders
+   call audio, which is *not* the visible Phone/FaceTime app itself — see
+   `native/audiotap/main.swift`'s header comment for why).
+3. The first time it captures, macOS will show a one-time system permission prompt — approve it
+   under System Settings → Privacy & Security → **Screen & System Audio Recording**.
 
-Captures your mic and the Phone app's call audio as two independent streams, so there's no
-guessing which speaker is which. One-time setup:
-
-1. Install [**BlackHole 2ch**](https://existential.audio/blackhole/) (`brew install --cask
-   blackhole-2ch`), then **reboot** — the driver won't be recognized until you do.
-2. During calls, set **BlackHole 2ch alone** as your Mac's audio output (Control Center or System
-   Settings → Sound → Output). The Phone app doesn't have its own device picker, so this has to be
-   the system output while you're on a call.
-
-   **Don't use a Multi-Output Device here.** It's the obvious way to also hear the call live
-   while capturing it, but real-time call apps — including the macOS Phone app — appear to
-   silently reject aggregate/Multi-Output output devices (likely because they need a real
-   hardware device for voice processing) and fall back to the built-in speakers instead, so
-   nothing reaches BlackHole. A plain, non-aggregate device like BlackHole 2ch alone works fine.
-3. In the Live Call panel, set **Caller audio** to the **BlackHole 2ch** device (auto-selected if
-   found) and **Your mic** to your real microphone. Since BlackHole has no speaker, the app plays
-   the captured caller audio back out to whatever you pick as **Monitor output** (e.g. your
-   headset) — that's how you actually hear them. The panel will confirm it's in dual-stream mode.
-
-Note: setting BlackHole 2ch as system output affects *all* system sound (you'll only hear
-anything that the app relays through Monitor output), so switch back to your normal output when
-you're not on a call.
+If the helper isn't built yet, or macOS denies the permission, the panel will show what went wrong.
 
 ### Using it
 
 1. Switch to **Live Call** mode, pick the right **Call type**, and click **Start Call**. macOS
    will prompt for microphone access the first time.
-2. Transcribed lines appear labeled **You** / **Them**. In single-mic mode this is a guess
-   (whoever speaks first is assumed to be you) — click **Swap Speakers** if it's backwards, which
-   relabels the whole transcript so far and everything after. In dual-stream mode labels are
-   exact, so there's no Swap button.
+2. Transcribed lines appear labeled **You** / **Them** — exact, no guessing.
 3. Suggestions auto-request after the prospect speaks (toggle this off if you'd rather trigger
    them manually with **Get Suggestions Now** — each request calls the Claude API).
 4. **End Call** stops the mic and closes the Deepgram connection(s). **Clear** resets the
@@ -247,19 +233,18 @@ you're not on a call.
 ### Recordings
 
 Every live call is automatically recorded to `recordings/<call type>/<timestamp>[-property
-label]/` — one raw audio file per channel (`audio-mixed.webm` in single-mic mode,
-`audio-rep.webm` + `audio-prospect.webm` in dual-stream), `transcript.txt`, and `meta.json` (call
-type, matched property if one was selected, start/end time). The **● Recording** indicator next
-to the status line confirms it's active; if the recording itself fails to start (e.g. a disk
-issue), the call still proceeds — transcription and coaching aren't affected — but an error
-banner will say so, since that call went unrecorded.
+label]/` — `audio-rep.webm` + `audio-prospect.raw` (the prospect channel is headerless PCM from
+the native tap, not webm), `transcript.txt`, and `meta.json` (call type, matched property if one
+was selected, start/end time). The **● Recording** indicator next to the status line confirms
+it's active; if the recording itself fails to start (e.g. a disk issue), the call still proceeds
+— transcription and coaching aren't affected — but an error banner will say so, since that call
+went unrecorded.
 
-**Dual-stream calls also get a single merged file, `audio-merged.mp3`** — the two mono channels
-combined into one stereo file (you on the left channel, the prospect on the right), for actually
-listening back to a call instead of juggling two files. Requires **ffmpeg** on your PATH (`brew
-install ffmpeg`); if it's missing, or the merge otherwise fails, the two per-channel `.webm`
-files are still saved — you'll just get an error banner and no `audio-merged.mp3` for that call.
-Single-mic mode doesn't need this: `audio-mixed.webm` already has both sides of the call.
+**Calls also get a single merged file, `audio-merged.mp3`** — the two mono channels combined into
+one stereo file (you on the left channel, the prospect on the right), for actually listening back
+to a call instead of juggling two files. Requires **ffmpeg** on your PATH (`brew install ffmpeg`);
+if it's missing, or the merge otherwise fails, the two per-channel files are still saved — you'll
+just get an error banner and no `audio-merged.mp3` for that call.
 
 Like `transcripts/` and `data/`, this folder is gitignored and local-only (real seller PII plus
 call audio). **Check your state's call-recording consent law before relying on this** — Texas

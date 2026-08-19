@@ -40,6 +40,14 @@ const api = {
       const listener = (_event, message) => callback(message)
       ipcRenderer.on('live-call:error', listener)
       return () => ipcRenderer.removeListener('live-call:error', listener)
+    },
+    // Routine audiotap progress ("waiting for Phone to launch", "capturing
+    // Phone") — separate from onError so the UI doesn't treat normal setup
+    // as a failure. See liveCall.js.
+    onAudiotapStatus: (callback) => {
+      const listener = (_event, message) => callback(message)
+      ipcRenderer.on('live-call:audiotap-status', listener)
+      return () => ipcRenderer.removeListener('live-call:audiotap-status', listener)
     }
   }
 }

@@ -20,6 +20,19 @@ function sanitizeForPath(text) {
     .slice(0, 60)
 }
 
+// Every channel is recorded as `audio-<channel>.<ext>`. Almost every source
+// is a browser MediaRecorder stream, whose chunks concatenate into a valid
+// .webm with no extra work — that's the default. The native audiotap helper
+// (see audioTap.js) instead emits headerless raw PCM, which needs its own
+// extension and explicit ffmpeg input flags (`-f s16le -ar ... -ac ...`) so
+// ffmpeg knows how to read it — `channelFormats` carries that per channel.
+function extFor(channel, channelFormats) {
+  return channelFormats?.[channel]?.ext ?? 'webm'
+}
+function ffmpegInputArgsFor(channel, channelFormats) {
+  return channelFormats?.[channel]?.ffmpegArgs ?? []
+}
+
 // Dual-stream calls record the rep and prospect as separate mono files —
 // good for exact speaker labels, bad for just listening back to the call.
 // Merge them into one stereo file (rep on the left channel, prospect on the
@@ -37,16 +50,18 @@ function sanitizeForPath(text) {
 // with silence instead of truncating the longer one. normalize=0 because
 // amix's default loudness normalization is for overlapping content on the
 // same channel — there isn't any here, each channel has exactly one source.
-function mergeChannels(dir) {
-  const repPath = join(dir, 'audio-rep.webm')
-  const prospectPath = join(dir, 'audio-prospect.webm')
+function mergeChannels(dir, channelFormats) {
+  const repPath = join(dir, `audio-rep.${extFor('rep', channelFormats)}`)
+  const prospectPath = join(dir, `audio-prospect.${extFor('prospect', channelFormats)}`)
   const outputFile = 'audio-merged.mp3'
 
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', [
       '-y',
+      ...ffmpegInputArgsFor('rep', channelFormats),
       '-i',
       repPath,
+      ...ffmpegInputArgsFor('prospect', channelFormats),
       '-i',
       prospectPath,
       '-filter_complex',
@@ -86,14 +101,19 @@ function mergeChannels(dir) {
 // to stream these same chunks to Deepgram), a transcript.txt, and a
 // meta.json with call type, matched property, and timing. Call
 // recording.finish() when the call ends.
-export async function startRecording(appRootDir, { callType, channels, property }) {
+export async function startRecording(appRootDir, { callType, channels, property, channelFormats }) {
   const startedAt = new Date()
   const stamp = startedAt.toISOString().replace(/[:.]/g, '-')
   const label = property?.label ? `-${sanitizeForPath(property.label)}` : ''
   const dir = join(recordingsRoot(appRootDir), callType, `${stamp}${label}`)
   await mkdir(dir, { recursive: true })
 
-  const streams = new Map(channels.map((channel) => [channel, createWriteStream(join(dir, `audio-${channel}.webm`))]))
+  const streams = new Map(
+    channels.map((channel) => [
+      channel,
+      createWriteStream(join(dir, `audio-${channel}.${extFor(channel, channelFormats)}`))
+    ])
+  )
 
   return {
     dir,
@@ -109,7 +129,7 @@ export async function startRecording(appRootDir, { callType, channels, property 
       let mergeError = null
       if (channels.includes('rep') && channels.includes('prospect')) {
         try {
-          mergedAudioFile = await mergeChannels(dir)
+          mergedAudioFile = await mergeChannels(dir, channelFormats)
         } catch (err) {
           mergeError = err.message
         }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.salescallscripter.audiotap</string>
+	<key>CFBundleName</key>
+	<string>audiotap</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>salesCallScripter captures the caller's audio directly from the Phone app during a live call, so it can transcribe and coach without routing your system audio through a virtual device.</string>
+</dict>
+</plist>
