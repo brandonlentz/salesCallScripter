@@ -28,10 +28,6 @@ function App() {
   const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
   const [selectedProperty, setSelectedProperty] = useState(null)
   const [propertyOpen, setPropertyOpen] = useState(false)
-  // Bumped on every dial (see handleCall below) — LiveCallPanel watches this
-  // to auto-start recording/transcription the moment a number is clicked,
-  // instead of requiring a separate manual "Start Call".
-  const [dialSignal, setDialSignal] = useState(0)
 
   // Script variants (lightweight split-testing) — see scriptVariants.js.
   // `variants` is the list for the current call type (seeded with the
@@ -109,7 +105,6 @@ function App() {
   function handleCall(property, contact) {
     setSelectedProperty(contact ? { ...property, activeContact: contact } : property)
     setPropertyOpen(false)
-    setDialSignal((n) => n + 1)
   }
 
   const stages = getStages(callType, activeSections)
@@ -207,7 +202,6 @@ function App() {
         onSuggestions={requestSuggestions}
         callType={callType}
         property={selectedProperty}
-        dialSignal={dialSignal}
       />
 
       <PropertyPanel

@@ -114,12 +114,13 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
     window.api.dialer.call(phoneNumber)
   }
 
-  // FaceTime is still a "call" for coaching purposes — same auto-start
-  // treatment as a Phone call (see App.jsx's handleCall/dialSignal). The
-  // native tap likely captures FaceTime audio too (same underlying daemon
-  // as Phone/Continuity calls — see native/audiotap/main.swift), but that's
-  // only confirmed for Phone calls so far; worth trying it on a real
-  // FaceTime call.
+  // FaceTime is still a "call" for coaching purposes — same treatment as a
+  // Phone call (see App.jsx's handleCall): selects the property/contact as
+  // call context, but recording/transcription still needs a manual Start
+  // Call in LiveCallPanel. The native tap likely captures FaceTime audio
+  // too (same underlying daemon as Phone/Continuity calls — see
+  // native/audiotap/main.swift), but that's only confirmed for Phone calls
+  // so far; worth trying it on a real FaceTime call.
   function handleFaceTime(property, contact, phoneNumber) {
     onCall(property, contact)
     window.api.dialer.facetime(phoneNumber)

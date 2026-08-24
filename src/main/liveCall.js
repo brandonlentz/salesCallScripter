@@ -24,11 +24,11 @@ const NATIVE_TAP_CHANNEL_FORMAT = {
 // chunks already flowing to Deepgram are appended to per-channel files as
 // they arrive, so this adds no extra IPC traffic.
 //
-// Ending is manual only (End Call in the UI) — an earlier version tried to
-// auto-detect hangup from a volume heuristic, but that risked ending a call
-// early during a real, long silence (a rep on hold, a long thinking pause),
-// which is worse than just requiring one click. Starting stays automatic —
-// see LiveCallPanel.jsx's dialSignal handling — only ending was reverted.
+// Both starting and ending are manual (Start Call / End Call in the UI) —
+// an earlier version auto-started on dial and also tried auto-detecting
+// hangup from a volume heuristic, but the latter risked ending a call early
+// during a real, long silence (a rep on hold, a long thinking pause), which
+// is worse than just requiring one click each way (see LiveCallPanel.jsx).
 export function registerLiveCallHandlers(getMainWindow, appRootDir) {
   const connections = new Map()
   let recording = null

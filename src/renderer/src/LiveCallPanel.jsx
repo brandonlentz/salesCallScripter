@@ -24,14 +24,14 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 300
 // actively harmful (interfered with real call audio), and native tap
 // supersedes both once its target-process bug was fixed.
 //
-// Starting is automatic, no manual Start Call needed: App.jsx bumps
-// `dialSignal` the moment you click a phone number (see PropertyPanel/
-// App.jsx's handleCall), which the effect below turns into a start() call.
-// Ending is deliberately still manual (End Call) — an earlier attempt at
-// auto-detecting hangup from a volume heuristic in liveCall.js risked
-// ending a call early during a real, long silence (a rep on hold, a long
-// thinking pause), which is worse than requiring one click.
-export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property, dialSignal }) {
+// Both starting and ending are manual (Start Call / End Call) — dialing a
+// phone number from PropertyPanel no longer auto-starts recording/
+// transcription; it only selects the property/contact as call context (see
+// App.jsx's handleCall). An earlier version auto-started on dial and also
+// tried auto-detecting hangup from a volume heuristic in liveCall.js, but
+// the latter risked ending a call early during a real, long silence (a rep
+// on hold, a long thinking pause) — worse than requiring one click each way.
+export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property }) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
@@ -65,26 +65,13 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     transcriptTextRef.current = transcriptText
   }, [transcriptText])
 
-  // Guards stop() against a double-fire (e.g. mashing End Call, or a
-  // dialSignal-triggered start() racing a manual stop()) — a ref rather
-  // than reading `status` directly since stop() can be called from a
+  // Guards stop() against a double-fire (e.g. mashing End Call) — a ref
+  // rather than reading `status` directly since stop() can be called from a
   // closure captured at an earlier render than the current one.
   const statusRef = useRef(status)
   useEffect(() => {
     statusRef.current = status
   }, [status])
-
-  // Auto-start on dial — see the component doc comment above. Skips the
-  // very first render (dialSignalRef starts equal to the initial prop) so
-  // mounting the panel doesn't itself start a call.
-  const dialSignalRef = useRef(dialSignal)
-  useEffect(() => {
-    if (dialSignal === undefined || dialSignal === dialSignalRef.current) return
-    dialSignalRef.current = dialSignal
-    if (status === 'idle') start()
-    // Only dialSignal should retrigger this — status is read, not reacted to.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialSignal])
 
   function appendEntry(speaker, text) {
     setEntries((prev) => [...prev, { speaker, text }])
@@ -230,8 +217,8 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
       </label>
 
       <p className="panel__hint">
-        Every call is recorded and transcribed automatically — dialing a number starts this
-        panel for you. Click <strong>End Call</strong> below when you hang up. No device setup
+        Click <strong>Start Call</strong> below once you&apos;re on the line to begin recording
+        and transcribing, and <strong>End Call</strong> when you hang up. No device setup
         needed — your mic uses the system default, and your normal speakers/headset keep working
         the whole time (native audio tap, see <code>native/audiotap</code>). The first time this
         runs, macOS will ask you to approve audio capture (System Settings → Privacy &amp;
