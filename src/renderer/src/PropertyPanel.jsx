@@ -44,11 +44,10 @@ function allPhones(property) {
 // deceased owner, tax situation, known heirs, etc. — not just the generic
 // script.
 //
-// Entries are stored locally (see src/main/properties.js) and, for now,
-// entered manually (copy from REISift) rather than pulled live — REISift
-// doesn't expose a documented search/pull API. Search box + list here is
-// the same shape a future REISift sync would populate, so wiring that in
-// later shouldn't need UI changes.
+// Entries are stored locally (see src/main/properties.js), populated either
+// by hand/paste-and-parse here, or live by REISift's outbound webhook (see
+// reisiftWebhook.js) — both write the same shape, so this UI doesn't care
+// which one created a given record.
 export default function PropertyPanel({ open, onClose, selected, onSelect, onUpdated, onClear, onCall }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -77,6 +76,20 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
     refresh(query)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
+
+  // Live REISift sync (see reisiftWebhook.js) — refreshes the list if the
+  // drawer's open, and refreshes App.jsx's selected property in place if
+  // it's the one that just synced (e.g. a webhook lands mid-call).
+  useEffect(() => {
+    return window.api.properties.onSynced((property) => {
+      if (open) refresh(query)
+      if (selected?.id === property.id) onUpdated?.(property)
+    })
+    // Re-subscribes on every dependency change so the handler always closes
+    // over the current open/query/selected rather than stale values from
+    // whenever the listener was first attached.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, query, selected, onUpdated])
 
   if (!open) return null
 
@@ -253,6 +266,12 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
                     <div className="property-selected__label">
                       <strong>{selected.label}</strong>
                       {selected.propertyAddress && <span>{selected.propertyAddress}</span>}
+                      {selected.reisiftUuid && (
+                        <span className="panel__hint" title="Synced live from REISift">
+                          🔄 {selected.reisiftStatus || 'REISift'}
+                          {selected.reisiftTags?.length ? ` · ${selected.reisiftTags.join(', ')}` : ''}
+                        </span>
+                      )}
                     </div>
                     <button type="button" onClick={onClear}>
                       Clear

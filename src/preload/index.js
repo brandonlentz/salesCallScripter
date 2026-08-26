@@ -28,7 +28,16 @@ const api = {
     save: (data) => ipcRenderer.invoke('properties:save', data),
     update: (id, data) => ipcRenderer.invoke('properties:update', { id, data }),
     delete: (id) => ipcRenderer.invoke('properties:delete', id),
-    parse: (rawText) => ipcRenderer.invoke('properties:parse', rawText)
+    parse: (rawText) => ipcRenderer.invoke('properties:parse', rawText),
+    // Fires whenever the REISift webhook receiver creates or updates a
+    // property (see reisiftWebhook.js) — lets an open Property drawer, or
+    // a live call already grounded in this property, pick up the change
+    // without a manual refresh.
+    onSynced: (callback) => {
+      const listener = (_event, property) => callback(property)
+      ipcRenderer.on('properties:synced', listener)
+      return () => ipcRenderer.removeListener('properties:synced', listener)
+    }
   },
   dialer: {
     call: (phoneNumber) => ipcRenderer.invoke('dialer:call', phoneNumber),

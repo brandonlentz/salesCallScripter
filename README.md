@@ -214,28 +214,69 @@ Beyond the generic script, the suggestion engine can be grounded in specifics ab
 and contact for this call — deceased owner, tax/legal status, known heirs, prior contact notes,
 offer amount — pulled from your REISift records.
 
-**Current state: paste-and-parse, not a live REISift sync.** REISift doesn't publish a documented
-pull/search API for third-party apps, only a Zapier action and native outbound webhooks (both
-configured from REISift's own Settings → Integrations page), and there's no way for this app to
-open an authenticated REISift session to fetch a page by URL. So instead:
+**Records sync live from REISift via an outbound webhook** — no more copy/paste for properties
+REISift already knows about. REISift doesn't publish a pull/search API, but it does support
+outbound webhooks (Settings → Integrations → Webhooks, fired from a sequence's "Webhook" action),
+and `src/main/reisiftWebhook.js` runs a local HTTP receiver for exactly that.
 
-1. Click **Property** in the header, then **+ New Property**.
-2. Copy from REISift and paste it into the **Paste from REISift** box, then click **Parse & Fill
-   Fields**. Two ways to copy, and both work:
-   - **Select all the visible text** on the page (quick, works for most cases)
-   - **Full page HTML** (DevTools → right-click the `<html>` element → Copy → Copy outerHTML) —
-     slower to grab, but catches anything in a collapsed accordion or a tab you don't have open,
-     since that content still exists in the page's HTML even when it's not currently visible.
-     Plain text copy only grabs what's on screen.
+### Wiring up the live sync
 
-   Either way, Claude extracts what it actually finds — deceased owner, property address, tax
-   status, known heirs, contact info, prior notes — into the fields below, leaving anything not
-   present blank rather than guessing. Review/correct before saving.
-3. Before a call, click **Property** and search/select the right one — search matches on label,
-   contact name, phone, or address. The selected property shows in the header and feeds every
-   suggestion request (Training and Live Call both) until you clear or switch it.
+REISift is a hosted SaaS; this is a desktop app behind your router's NAT, so REISift can't reach
+it directly — something has to expose the receiver's local port to the internet. This project
+uses **Tailscale Funnel** for that, since it gives a stable hostname that survives app/machine
+restarts (no re-pasting a new webhook URL into REISift every time, unlike a free ngrok/Cloudflare
+quick tunnel):
 
-You can still fill the fields in by hand instead — the paste box is optional, just faster.
+1. Install [Tailscale](https://tailscale.com/download) and sign in (free for personal use).
+2. Enable HTTPS certs for your tailnet once, if you haven't: `https://login.tailscale.com/admin/dns` → **Enable HTTPS**.
+3. Run the app, then expose the receiver's port (`4790` by default — see `REISIFT_WEBHOOK_PORT` in
+   `.env.example`):
+   ```
+   tailscale funnel 4790
+   ```
+   Tailscale prints a public `https://<your-machine>.<tailnet>.ts.net` URL — that hostname stays
+   the same across restarts as long as your machine's Tailscale identity doesn't change.
+4. In REISift: Settings → Integrations → Webhooks → paste that URL as the webhook target, then
+   attach it to whichever sequence(s) should push updates (e.g. "card moved to a list" triggers).
+5. Leave `tailscale funnel 4790` running in the background alongside the app. Every webhook
+   REISift fires now lands on the receiver instead of a disposable inspector like webhook.cool.
+
+**No signature verification yet** — REISift signs deliveries (`x-sift-webhook-signature` /
+`x-sift-webhook-timestamp`) but doesn't publish the HMAC scheme in their docs, so the receiver
+currently accepts any POST it gets. Acceptable for now since the endpoint sits behind an
+unguessable tunnel hostname, but worth tightening if REISift's dashboard ever surfaces a signing
+secret.
+
+### What gets synced, and what doesn't
+
+Matched by REISift's own `property.uuid`, not this app's local id — so the same property is
+created once and updated in place on every later webhook, no duplicates:
+
+- **REISift owns** (always overwritten by a sync): property address, tax/legal milestone dates
+  (rolled into a one-line `taxStatus` summary), contacts and their phone numbers/tags, and
+  REISift's own status/tags/lists (shown as a `🔄` badge on the selected property).
+- **You own** (a sync never touches these once set): the property's display label, offer amount,
+  pain-points summary, and each phone's local call-outcome tag (see [Multiple contacts, multiple
+  numbers](#multiple-contacts-multiple-numbers) below) — *except* REISift reporting a contact as
+  DNC always forces that tag to **DNC** regardless of what was set locally, since that's a
+  compliance signal, not a coaching note.
+- Nothing is ever deleted by a sync — a contact or number missing from one payload isn't treated
+  as proof they're gone, only new/changed data is applied.
+
+### Manual entry still works
+
+The **paste-and-parse** flow (click **Property** → **+ New Property** → paste REISift's page text
+or HTML into **Paste from REISift** → **Parse & Fill Fields**) is still there for properties you
+haven't wired a webhook for, or want to add ad hoc. It writes the exact same local shape the
+webhook sync does, so both paths are interchangeable — a property started by hand can still get
+picked up and enriched by a later webhook if its `property.uuid` happens to match, though in
+practice hand-entered properties won't have one until REISift's webhook creates its own copy.
+
+Either way: before a call, click **Property** and search/select the right one — search matches on
+label, contact name, phone, or address. The selected property shows in the header and feeds every
+suggestion request (Training and Live Call both) until you clear or switch it. If a webhook syncs
+an update to the property you're currently on — even mid-call — the header and suggestion context
+refresh automatically, no need to re-select it.
 
 ### Multiple contacts, multiple numbers
 
@@ -296,12 +337,12 @@ system prompt, which stays byte-identical per call type + script variant so cach
 (see
 [Suggestion latency](#suggestion-latency) above).
 
-**If/when real REISift API or webhook access gets sorted out:** the local property store's field
-shape (`label`, `contacts` — each `{ name, relationship, phones: [{ number, label }] }` —
+This is exactly what the REISift webhook sync (above) does now — the local property store's field
+shape (`label`, `contacts` — each `{ name, relationship, phones: [{ number, label, status }] }` —
 `deceasedName`, `propertyAddress`, `taxStatus`, `caseNumber`, `knownHeirs`, `priorContactNotes`,
-`offerAmount`, `painPointsSummary`) is designed so a sync job could populate it directly — the
-search/pick UI and the suggestion-engine wiring wouldn't need to change, only how entries get
-created.
+`offerAmount`, `painPointsSummary`, plus `reisiftUuid`/`reisiftStatus`/`reisiftTags`/`reisiftLists`
+on synced records) was designed up front so a sync job could populate it directly — the search/
+pick UI and the suggestion-engine wiring didn't need to change, only how entries get created.
 
 ## Live Call
 

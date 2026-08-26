@@ -572,6 +572,7 @@ body {
 }
 
 .property-selected__label span {
+  display: block;
   color: #9a9fa6;
   font-size: 0.75rem;
 }
