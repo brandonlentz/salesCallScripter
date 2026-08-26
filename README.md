@@ -217,35 +217,46 @@ offer amount — pulled from your REISift records.
 **Records sync live from REISift via an outbound webhook** — no more copy/paste for properties
 REISift already knows about. REISift doesn't publish a pull/search API, but it does support
 outbound webhooks (Settings → Integrations → Webhooks, fired from a sequence's "Webhook" action),
-and `src/main/reisiftWebhook.js` runs a local HTTP receiver for exactly that.
+and `src/main/reisiftWebhookSocket.js` receives exactly that.
 
 ### Wiring up the live sync
 
 REISift is a hosted SaaS; this is a desktop app behind your router's NAT, so REISift can't reach
-it directly — something has to expose the receiver's local port to the internet. This project
-uses **Tailscale Funnel** for that, since it gives a stable hostname that survives app/machine
-restarts (no re-pasting a new webhook URL into REISift every time, unlike a free ngrok/Cloudflare
-quick tunnel):
+it directly. Rather than exposing a local port via a tunnel (ngrok/Cloudflare/Tailscale — more
+moving parts, extra software to keep running), this app subscribes to a **webhook.site** URL's
+events over WebSocket — an outbound connection from this app to webhook.site, the same shape as
+the existing Deepgram connections, so nothing on this machine needs to accept inbound traffic at
+all:
 
-1. Install [Tailscale](https://tailscale.com/download) and sign in (free for personal use).
-2. Enable HTTPS certs for your tailnet once, if you haven't: `https://login.tailscale.com/admin/dns` → **Enable HTTPS**.
-3. Run the app, then expose the receiver's port (`4790` by default — see `REISIFT_WEBHOOK_PORT` in
-   `.env.example`):
-   ```
-   tailscale funnel 4790
-   ```
-   Tailscale prints a public `https://<your-machine>.<tailnet>.ts.net` URL — that hostname stays
-   the same across restarts as long as your machine's Tailscale identity doesn't change.
-4. In REISift: Settings → Integrations → Webhooks → paste that URL as the webhook target, then
-   attach it to whichever sequence(s) should push updates (e.g. "card moved to a list" triggers).
-5. Leave `tailscale funnel 4790` running in the background alongside the app. Every webhook
-   REISift fires now lands on the receiver instead of a disposable inspector like webhook.cool.
+1. Go to [webhook.site](https://webhook.site) — it hands you a unique URL immediately, no signup
+   required (e.g. `https://webhook.site/4197cd04-a2ac-4e62-bfc3-553946c42459`).
+2. Put that URL in `.env` as `REISIFT_WEBHOOK_SITE_URL` and restart the app. On startup it opens a
+   WebSocket to webhook.site and subscribes to that URL's events — check the console for
+   `[reisift-socket] connected, subscribing to token …`, and the Property drawer shows a live
+   `🔄 Connected to webhook.site` status line.
+3. In REISift: Settings → Integrations → Webhooks → paste the **same** URL as the webhook target,
+   then attach it to whichever sequence(s) should push updates (e.g. "card moved to a list"
+   triggers). Every delivery REISift makes to that URL now reaches this app in real time, synced
+   or not, whether or not the webhook.site page itself is open in a browser.
 
-**No signature verification yet** — REISift signs deliveries (`x-sift-webhook-signature` /
-`x-sift-webhook-timestamp`) but doesn't publish the HMAC scheme in their docs, so the receiver
-currently accepts any POST it gets. Acceptable for now since the endpoint sits behind an
-unguessable tunnel hostname, but worth tightening if REISift's dashboard ever surfaces a signing
-secret.
+**Free/anonymous webhook.site URLs have real limits, and this project runs on one deliberately** —
+a free URL stops accepting new requests after **100 total, or 7 days, whichever comes first**,
+and REISift just gets a silent 410/429 with no error surfaced to this app. webhook.site Pro
+removes both caps, but the cost wasn't judged worth it here — when the URL dies, generate a new
+one at webhook.site, update `REISIFT_WEBHOOK_SITE_URL` in `.env`, restart the app, and paste the
+new URL into REISift's webhook settings in place of the old one. The `🔄` status line in the
+Property drawer only reports the WebSocket connection to webhook.site itself, not whether the
+*page's own URL* has hit its cap — there's no signal for that, so if syncs quietly stop arriving,
+suspect an expired/capped URL first.
+
+**No signature verification** — REISift signs deliveries (`x-sift-webhook-signature` /
+`x-sift-webhook-timestamp`) but doesn't publish the HMAC scheme in their docs, so anything posted
+to the webhook.site URL is accepted and synced. Acceptable for now since the URL itself is an
+unguessable token, but worth tightening if REISift's dashboard ever surfaces a signing secret.
+
+**Why `socket.io-client@2` specifically:** webhook.site's WebSocket server only speaks the old
+Engine.IO v3 wire protocol that Socket.IO v2 clients use — a v3/v4 client can't complete the
+handshake at all. Pinned deliberately in `package.json`; don't "upgrade" it.
 
 ### What gets synced, and what doesn't
 

@@ -18,7 +18,7 @@ import { listReferences, saveReference, deleteReference } from './nepqReferences
 import { parseNepqReference } from './parseNepqReference.js'
 import { analyzeCall } from './callAnalysis.js'
 import { initUsageTracker, getUsageSnapshot } from './usageTracker.js'
-import { startReisiftWebhookServer } from './reisiftWebhook.js'
+import { startReisiftWebhookSocket } from './reisiftWebhookSocket.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -114,7 +114,7 @@ function registerIpcHandlers() {
   registerLiveCallHandlers(() => mainWindow, appRootDir)
 }
 
-let reisiftWebhookServer = null
+let reisiftWebhookSocket = null
 
 app.whenReady().then(() => {
   initUsageTracker(() => mainWindow)
@@ -123,9 +123,11 @@ app.whenReady().then(() => {
 
   // Pushes 'properties:synced' so an open Property drawer (or a live call
   // already grounded in this property) picks up a webhook-driven update
-  // without the rep manually refreshing — see reisiftWebhook.js.
-  reisiftWebhookServer = startReisiftWebhookServer((result) => {
-    mainWindow?.webContents.send('properties:synced', result.property)
+  // without the rep manually refreshing, and 'reisift:status' for a small
+  // connection indicator — see reisiftWebhookSocket.js.
+  reisiftWebhookSocket = startReisiftWebhookSocket(process.env.REISIFT_WEBHOOK_SITE_URL, {
+    onSynced: (result) => mainWindow?.webContents.send('properties:synced', result.property),
+    onStatus: (message) => mainWindow?.webContents.send('reisift:status', message)
   })
 
   app.on('activate', () => {
@@ -134,7 +136,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
-  reisiftWebhookServer?.stop()
+  reisiftWebhookSocket?.stop()
 })
 
 app.on('window-all-closed', () => {

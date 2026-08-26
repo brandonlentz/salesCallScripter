@@ -46,8 +46,8 @@ function allPhones(property) {
 //
 // Entries are stored locally (see src/main/properties.js), populated either
 // by hand/paste-and-parse here, or live by REISift's outbound webhook (see
-// reisiftWebhook.js) — both write the same shape, so this UI doesn't care
-// which one created a given record.
+// reisiftWebhookSocket.js) — both write the same shape, so this UI doesn't
+// care which one created a given record.
 export default function PropertyPanel({ open, onClose, selected, onSelect, onUpdated, onClear, onCall }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -57,6 +57,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
   const [pasteText, setPasteText] = useState('')
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState('')
+  const [reisiftStatus, setReisiftStatus] = useState('')
 
   async function refresh(q) {
     setResults(await window.api.properties.search(q))
@@ -77,9 +78,18 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
-  // Live REISift sync (see reisiftWebhook.js) — refreshes the list if the
-  // drawer's open, and refreshes App.jsx's selected property in place if
-  // it's the one that just synced (e.g. a webhook lands mid-call).
+  // Connection status for the REISift sync (see reisiftWebhookSocket.js) —
+  // subscribed for the component's whole lifetime, not just while the
+  // drawer's open, since a dead connection or an expired free webhook.site
+  // URL (see the README's 100-request/7-day caveat) fails silently
+  // otherwise; this is the only place that would surface it.
+  useEffect(() => {
+    return window.api.properties.onReisiftStatus(setReisiftStatus)
+  }, [])
+
+  // Live REISift sync (see reisiftWebhookSocket.js) — refreshes the list if
+  // the drawer's open, and refreshes App.jsx's selected property in place
+  // if it's the one that just synced (e.g. a webhook lands mid-call).
   useEffect(() => {
     return window.api.properties.onSynced((property) => {
       if (open) refresh(query)
@@ -260,6 +270,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
         <div className="drawer__body">
           {view === 'list' ? (
             <>
+              {reisiftStatus && <p className="panel__hint">🔄 {reisiftStatus}</p>}
               {selected && (
                 <div className="property-selected">
                   <div className="property-selected__header">
