@@ -94,6 +94,12 @@ body {
   border-radius: 999px;
   padding: 0.4rem 0.85rem;
   font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.stage-tracker__item:hover {
+  border-color: #3b82f6;
 }
 
 .stage-tracker__item.is-active {
@@ -560,6 +566,15 @@ body {
 
 .property-selected__contact-phones button {
   color: #cfd2d8;
+}
+
+.phone-status {
+  background: #1c1f25;
+  color: #cfd2d8;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.3rem;
 }
 
 .property-selected__contact-phones em {

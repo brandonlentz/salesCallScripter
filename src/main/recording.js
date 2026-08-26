@@ -50,10 +50,32 @@ function ffmpegInputArgsFor(channel, channelFormats) {
 // with silence instead of truncating the longer one. normalize=0 because
 // amix's default loudness normalization is for overlapping content on the
 // same channel — there isn't any here, each channel has exactly one source.
-function mergeChannels(dir, channelFormats) {
+//
+// `channelStartedAt` (wall-clock ms per channel, set on each channel's
+// first appendChunk() — see startRecording below) fixes a real skew: the
+// 'rep' MediaRecorder and the native audiotap helper each start producing
+// audio independently, on their own schedule (mic-permission prompts,
+// getUserMedia latency, how long the tap takes to attach), not in lockstep.
+// Both files still start writing at their own byte offset 0, so without
+// correction ffmpeg lines those up as if they began at the same instant —
+// whichever channel actually started later ends up shifted earlier than it
+// should be, which sounds like the two sides talking over each other even
+// when they didn't. Padding the later-starting channel with silence
+// (adelay, ms) equal to the gap between the two start times re-aligns them
+// to a shared t=0 before the pan/mix above ever sees them.
+function mergeChannels(dir, channelFormats, channelStartedAt = {}) {
   const repPath = join(dir, `audio-rep.${extFor('rep', channelFormats)}`)
   const prospectPath = join(dir, `audio-prospect.${extFor('prospect', channelFormats)}`)
   const outputFile = 'audio-merged.mp3'
+
+  const repStart = channelStartedAt.rep
+  const prospectStart = channelStartedAt.prospect
+  // Only correctable if we actually saw a first chunk on both sides —
+  // otherwise (e.g. one channel never received audio) fall back to no
+  // delay, the old behavior, rather than guessing.
+  const earliest = repStart != null && prospectStart != null ? Math.min(repStart, prospectStart) : null
+  const repDelayMs = earliest != null ? repStart - earliest : 0
+  const prospectDelayMs = earliest != null ? prospectStart - earliest : 0
 
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', [
@@ -65,8 +87,8 @@ function mergeChannels(dir, channelFormats) {
       '-i',
       prospectPath,
       '-filter_complex',
-      '[0:a]aresample=async=1,pan=stereo|c0=c0|c1=0*c0[a0];' +
-        '[1:a]aresample=async=1,pan=stereo|c0=0*c0|c1=c0[a1];' +
+      `[0:a]adelay=${repDelayMs}:all=1,aresample=async=1,pan=stereo|c0=c0|c1=0*c0[a0];` +
+        `[1:a]adelay=${prospectDelayMs}:all=1,aresample=async=1,pan=stereo|c0=0*c0|c1=c0[a1];` +
         '[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]',
       '-map',
       '[aout]',
@@ -114,10 +136,14 @@ export async function startRecording(appRootDir, { callType, channels, property,
       createWriteStream(join(dir, `audio-${channel}.${extFor(channel, channelFormats)}`))
     ])
   )
+  // Wall-clock time of each channel's first appendChunk() — see
+  // mergeChannels' comment above for why this matters for alignment.
+  const channelStartedAt = {}
 
   return {
     dir,
     appendChunk(channel, buffer) {
+      if (!(channel in channelStartedAt)) channelStartedAt[channel] = Date.now()
       streams.get(channel)?.write(buffer)
     },
     async finish({ transcriptText } = {}) {
@@ -129,7 +155,7 @@ export async function startRecording(appRootDir, { callType, channels, property,
       let mergeError = null
       if (channels.includes('rep') && channels.includes('prospect')) {
         try {
-          mergedAudioFile = await mergeChannels(dir, channelFormats)
+          mergedAudioFile = await mergeChannels(dir, channelFormats, channelStartedAt)
         } catch (err) {
           mergeError = err.message
         }

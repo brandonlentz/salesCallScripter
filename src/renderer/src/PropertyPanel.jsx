@@ -14,7 +14,20 @@ const BLANK_DRAFT = {
 }
 
 const BLANK_CONTACT = { name: '', relationship: '', phones: [] }
-const BLANK_PHONE = { number: '', label: '' }
+const BLANK_PHONE = { number: '', label: '', status: '' }
+
+// Call-outcome tag for a single number — set after a dial attempt so the
+// next rep to work this property (or you, next round) knows what happened
+// last time without re-reading notes. Purely informational, doesn't affect
+// dialing or the suggestion engine.
+const PHONE_STATUSES = [
+  { value: '', label: 'No status', icon: '' },
+  { value: 'correct', label: 'Correct', icon: '✅' },
+  { value: 'wrong', label: 'Wrong number', icon: '❌' },
+  { value: 'no-answer', label: 'No answer', icon: '📵' },
+  { value: 'dnc', label: 'DNC', icon: '🚫' },
+  { value: 'dead', label: 'Dead', icon: '💀' }
+]
 
 // Flattens every phone across every contact into one list, each entry
 // paired with which contact it belongs to — used anywhere we need "just
@@ -36,7 +49,7 @@ function allPhones(property) {
 // doesn't expose a documented search/pull API. Search box + list here is
 // the same shape a future REISift sync would populate, so wiring that in
 // later shouldn't need UI changes.
-export default function PropertyPanel({ open, onClose, selected, onSelect, onClear, onCall }) {
+export default function PropertyPanel({ open, onClose, selected, onSelect, onUpdated, onClear, onCall }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [view, setView] = useState('list') // 'list' | 'form'
@@ -130,6 +143,26 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
   // Messages.app with the conversation open so you type/send it yourself.
   function handleText(phoneNumber) {
     window.api.dialer.text(phoneNumber)
+  }
+
+  // Tags a number's call outcome from the "selected property" quick view
+  // (see below) — separate from the edit form's updatePhone, which only
+  // touches local draft state, because this fires while the drawer is
+  // sitting on the already-saved `selected` property, mid-dialing, and
+  // needs to persist immediately and refresh what App.jsx holds without
+  // closing the drawer (onSelect does that, which would be disruptive here).
+  async function handlePhoneStatus(contactIndex, phoneIndex, status) {
+    const updated = {
+      ...selected,
+      contacts: selected.contacts.map((c, ci) =>
+        ci === contactIndex
+          ? { ...c, phones: c.phones.map((p, pi) => (pi === phoneIndex ? { ...p, status } : p)) }
+          : c
+      )
+    }
+    const saved = await window.api.properties.update(selected.id, updated)
+    onUpdated(saved)
+    refresh(query)
   }
 
   async function handleDelete(id) {
@@ -261,6 +294,19 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                                     >
                                       💬
                                     </button>
+                                    <select
+                                      className="phone-status"
+                                      value={p.status ?? ''}
+                                      onChange={(e) => handlePhoneStatus(i, pi, e.target.value)}
+                                      title="Call outcome"
+                                      aria-label={`Call outcome for ${label}`}
+                                    >
+                                      {PHONE_STATUSES.map((s) => (
+                                        <option key={s.value} value={s.value}>
+                                          {s.icon ? `${s.icon} ${s.label}` : s.label}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </span>
                                 )
                               })
@@ -401,6 +447,18 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onCle
                           onChange={(e) => updatePhone(ci, pi, 'label', e.target.value)}
                           placeholder="Label (optional)"
                         />
+                        <select
+                          className="phone-status"
+                          value={phone.status ?? ''}
+                          onChange={(e) => updatePhone(ci, pi, 'status', e.target.value)}
+                          aria-label={`Call outcome for ${phone.number || 'this number'}`}
+                        >
+                          {PHONE_STATUSES.map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {s.icon ? `${s.icon} ${s.label}` : s.label}
+                            </option>
+                          ))}
+                        </select>
                         <button type="button" onClick={() => removePhone(ci, pi)}>
                           ✕
                         </button>

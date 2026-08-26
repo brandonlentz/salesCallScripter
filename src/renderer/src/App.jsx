@@ -107,6 +107,17 @@ function App() {
     setPropertyOpen(false)
   }
 
+  // Manual override for when you hit Start Call mid-conversation (already
+  // past Intro, say in TARP) — the AI re-detects the stage from the
+  // transcript on every suggestion round anyway (see nepqPrompt.js), so
+  // this is just a way to jump the script panel there immediately instead
+  // of waiting for the first round to catch up. The next auto/manual
+  // suggestion request can still move it again once it has transcript to
+  // go on.
+  function handleStageJump(stageId) {
+    setSuggestionState((prev) => ({ ...prev, stage: stageId, stageRationale: 'Manually set' }))
+  }
+
   const stages = getStages(callType, activeSections)
   const activeStage = suggestionState.stage ?? stages[0].id
 
@@ -152,12 +163,15 @@ function App() {
 
       <nav className="stage-tracker" aria-label="Call stages">
         {stages.map((stage) => (
-          <span
+          <button
+            type="button"
             key={stage.id}
             className={`stage-tracker__item${stage.id === activeStage ? ' is-active' : ''}`}
+            onClick={() => handleStageJump(stage.id)}
+            title={`Jump script to ${stage.label}`}
           >
             {stage.label}
-          </span>
+          </button>
         ))}
       </nav>
 
@@ -212,6 +226,7 @@ function App() {
           setSelectedProperty(property)
           setPropertyOpen(false)
         }}
+        onUpdated={setSelectedProperty}
         onClear={() => setSelectedProperty(null)}
         onCall={handleCall}
       />
