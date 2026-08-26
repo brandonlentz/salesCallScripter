@@ -2,6 +2,9 @@
   color-scheme: dark;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* Overridden inline on .app (see App.jsx's fontScale) — the fallback
+     here only matters if that inline style is ever missing. */
+  --content-font-scale: 1;
 }
 
 * {
@@ -55,6 +58,26 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
   align-self: flex-end;
+}
+
+.font-size-control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-end;
+  font-size: 0.75rem;
+  color: #9a9fa6;
+}
+
+.font-size-control button {
+  padding: 0.3rem 0.55rem;
+  font-weight: 600;
+}
+
+.font-size-control span {
+  min-width: 2.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .usage-meter {
@@ -173,10 +196,10 @@ body {
   min-height: 0;
 }
 
-.panel__script-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+/* Transcript hidden (the default — see App.jsx) — script and suggestions
+   split the freed-up column instead of leaving a gap. */
+.app__main--no-transcript {
+  grid-template-columns: 1.3fr 1fr;
 }
 
 .panel {
@@ -185,6 +208,29 @@ body {
   border-radius: 10px;
   padding: 1rem;
   overflow-y: auto;
+}
+
+/* The script panel scrolls its body, not the outer .panel — overriding
+   .panel's own overflow/scroll here keeps the "<call type> Call Script"
+   heading pinned while the script underneath scrolls to the active stage.
+   ScriptPanel.jsx's auto-scroll effect targets .panel__script-body
+   directly, so it has to be the actual scrolling box, not just a plain
+   flex child of one (that was the bug — the outer .panel was silently
+   doing all the scrolling and .scrollTo() on the inner div was a no-op). */
+.panel--script {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel__script-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .panel h2 {
@@ -233,7 +279,8 @@ body {
   border-left: 3px solid #3b82f6;
   border-radius: 6px;
   padding: 0.55rem 0.75rem;
-  font-size: 0.85rem;
+  /* Scaled by the A−/A+ control in the header — see App.jsx's fontScale. */
+  font-size: calc(0.85rem * var(--content-font-scale, 1));
   line-height: 1.4;
 }
 
@@ -289,6 +336,50 @@ body {
 .training-controls button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Start/End Call is THE button on this whole screen — the one you need to
+   hit without hunting for it, glancing away from a live conversation to do
+   it. Its own full-width row, separate from the secondary Clear/Get
+   Suggestions row below, and deliberately oversized rather than matched to
+   the rest of the UI's button scale. Color-coded so which state you're in
+   (about to start vs. already live) is obvious without reading the label. */
+.call-button-row {
+  display: flex;
+}
+
+.call-button {
+  flex: 1;
+  padding: 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.call-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.call-button--start {
+  background: #22a35e;
+  color: #fff;
+}
+
+.call-button--start:hover:not(:disabled) {
+  background: #279e63;
+}
+
+.call-button--end {
+  background: #d63b3b;
+  color: #fff;
+}
+
+.call-button--end:hover {
+  background: #c53434;
 }
 
 .drawer {
@@ -388,7 +479,8 @@ body {
 }
 
 .script-section li {
-  font-size: 0.8rem;
+  /* Scaled by the A−/A+ control in the header — see App.jsx's fontScale. */
+  font-size: calc(0.8rem * var(--content-font-scale, 1));
   line-height: 1.5;
   color: #cfd2d8;
 }

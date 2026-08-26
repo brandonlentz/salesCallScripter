@@ -229,16 +229,24 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
       {error && <p className="panel__error">{error}</p>}
       {audiotapStatus && <p className="panel__hint">🎙 {audiotapStatus}</p>}
 
-      <div className="training-controls">
+      <div className="call-button-row">
         {status === 'live' ? (
-          <button type="button" onClick={stop}>
+          <button type="button" className="call-button call-button--end" onClick={stop}>
             End Call
           </button>
         ) : (
-          <button type="button" onClick={start} disabled={status === 'connecting'}>
+          <button
+            type="button"
+            className="call-button call-button--start"
+            onClick={start}
+            disabled={status === 'connecting'}
+          >
             {status === 'connecting' ? 'Connecting…' : 'Start Call'}
           </button>
         )}
+      </div>
+
+      <div className="training-controls">
         <button type="button" onClick={handleClear} disabled={!entries.length || status === 'live'}>
           Clear
         </button>

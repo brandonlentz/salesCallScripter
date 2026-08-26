@@ -9,6 +9,24 @@ import UsageMeter from './UsageMeter'
 
 const ORIGINAL_VARIANT = { id: 'original', label: 'Original' }
 
+// Text-size control for the script and suggestions panels — the two things
+// you're actually reading off the screen mid-call, at arm's length or
+// across a desk. Applied as a CSS custom property (--content-font-scale,
+// see index.css) on the whole app rather than a fixed px value, so it
+// scales proportionally with each panel's own base size instead of forcing
+// them to match. Persisted to localStorage (renderer-only preference, no
+// need for the main-process stores the rest of the app's data goes
+// through) so it survives a restart.
+const FONT_SCALE_MIN = 0.8
+const FONT_SCALE_MAX = 1.8
+const FONT_SCALE_STEP = 0.1
+const FONT_SCALE_STORAGE_KEY = 'scs-content-font-scale'
+
+function loadFontScale() {
+  const saved = Number(localStorage.getItem(FONT_SCALE_STORAGE_KEY))
+  return saved >= FONT_SCALE_MIN && saved <= FONT_SCALE_MAX ? saved : 1
+}
+
 const initialSuggestionState = {
   loading: false,
   error: '',
@@ -29,6 +47,23 @@ function App() {
   const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
   const [selectedProperty, setSelectedProperty] = useState(null)
   const [propertyOpen, setPropertyOpen] = useState(false)
+  // Live Transcript is raw, un-curated speech-to-text (see LiveCallPanel's
+  // channel comment) — useful to check on, but noisy to have open the
+  // whole call, so it starts hidden and is a click away rather than
+  // always-on real estate next to the script/suggestions panels.
+  const [transcriptOpen, setTranscriptOpen] = useState(false)
+  const [fontScale, setFontScale] = useState(loadFontScale)
+
+  useEffect(() => {
+    localStorage.setItem(FONT_SCALE_STORAGE_KEY, String(fontScale))
+  }, [fontScale])
+
+  function adjustFontScale(delta) {
+    setFontScale((prev) => {
+      const next = Math.round((prev + delta) * 10) / 10
+      return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, next))
+    })
+  }
 
   // Script variants (lightweight split-testing) — see scriptVariants.js.
   // `variants` is the list for the current call type (seeded with the
@@ -123,7 +158,7 @@ function App() {
   const activeStage = suggestionState.stage ?? stages[0].id
 
   return (
-    <div className="app">
+    <div className="app" style={{ '--content-font-scale': fontScale }}>
       <header className="app__header">
         <div>
           <h1>Sales Call Scripter</h1>
@@ -159,6 +194,28 @@ function App() {
           <button type="button" onClick={() => setPropertyOpen(true)}>
             {selectedProperty ? `Property: ${selectedProperty.label}` : 'Property'}
           </button>
+          <button type="button" onClick={() => setTranscriptOpen((o) => !o)}>
+            {transcriptOpen ? 'Hide Transcript' : 'Show Transcript'}
+          </button>
+          <div className="font-size-control" title="Script & suggestion text size">
+            <button
+              type="button"
+              onClick={() => adjustFontScale(-FONT_SCALE_STEP)}
+              disabled={fontScale <= FONT_SCALE_MIN}
+              aria-label="Decrease text size"
+            >
+              A−
+            </button>
+            <span>{Math.round(fontScale * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => adjustFontScale(FONT_SCALE_STEP)}
+              disabled={fontScale >= FONT_SCALE_MAX}
+              aria-label="Increase text size"
+            >
+              A+
+            </button>
+          </div>
           <UsageMeter />
         </div>
       </header>
@@ -177,17 +234,19 @@ function App() {
         ))}
       </nav>
 
-      <main className="app__main">
+      <main className={`app__main${transcriptOpen ? '' : ' app__main--no-transcript'}`}>
         <ScriptPanel callType={callType} activeStage={activeStage} sections={activeSections} />
 
-        <section className="panel panel--transcript">
-          <h2>Live Transcript</h2>
-          {transcriptText ? (
-            <pre className="panel__transcript">{transcriptText}</pre>
-          ) : (
-            <p className="panel__placeholder">Nothing yet. Start a call below.</p>
-          )}
-        </section>
+        {transcriptOpen && (
+          <section className="panel panel--transcript">
+            <h2>Live Transcript</h2>
+            {transcriptText ? (
+              <pre className="panel__transcript">{transcriptText}</pre>
+            ) : (
+              <p className="panel__placeholder">Nothing yet. Start a call below.</p>
+            )}
+          </section>
+        )}
 
         <section className="panel panel--suggestions">
           <h2>Suggested Next Lines</h2>
