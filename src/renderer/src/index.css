@@ -382,6 +382,66 @@ body {
   background: #c53434;
 }
 
+/* Pops over the entire window the moment you dial from anywhere in the app
+   (Quick Call, a saved property's contact, the property list's quick-dial
+   button — see LiveCallPanel.jsx's dialSignal effect), so the manual Start
+   Call click is impossible to miss instead of waiting to be noticed in a
+   panel that might be scrolled out of view. Doesn't start anything on its
+   own — "Not now"/✕ dismiss it without side effects. */
+.start-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 11, 13, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.start-call-overlay__close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: transparent;
+  border: 1px solid #33373f;
+  color: #9a9fa6;
+  border-radius: 6px;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.start-call-overlay__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.start-call-overlay__who {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #f2f2f2;
+}
+
+.start-call-overlay__button {
+  padding: 2.5rem 5rem;
+  font-size: 2.5rem;
+  border-radius: 20px;
+}
+
+.start-call-overlay__dismiss {
+  background: transparent;
+  border: none;
+  color: #9a9fa6;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .drawer {
   position: fixed;
   inset: 0;

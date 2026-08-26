@@ -321,15 +321,14 @@ contact has its own list of `{ number, label }` phones, not one flat name/phone 
 Each contact's number in the expanded **Property** panel has three buttons:
 
 - **📞 Call** — hands off to macOS's `tel:` handler (the Phone app / Continuity Dialer — the same
-  app this whole live-call setup already routes audio through) and starts the Live Call panel
-  automatically — see [Using it — recording starts automatically, ends with one
-  click](#using-it--recording-starts-automatically-ends-with-one-click) above.
-- **🎥 FaceTime** — hands off to `facetime:`, opens FaceTime.app, and starts the Live Call panel
-  the same way a phone call does (it's still a "call" for coaching purposes). The native tap
-  likely captures FaceTime audio too — the same underlying daemon
-  (`com.apple.avconferenced`) is believed to handle both — but that's only been directly
-  confirmed on real Phone calls so far, not FaceTime. Try it and see; if transcription doesn't
-  pick up the other side, the Phone/Continuity path is the well-tested one.
+  app this whole live-call setup already routes audio through) and pops the full-screen Start Call
+  prompt — see [Using it — both starting and ending are one click, neither is
+  automatic](#using-it--both-starting-and-ending-are-one-click-neither-is-automatic) above.
+- **🎥 FaceTime** — hands off to `facetime:`, opens FaceTime.app, and pops the same prompt (it's
+  still a "call" for coaching purposes). The native tap likely captures FaceTime audio too — the
+  same underlying daemon (`com.apple.avconferenced`) is believed to handle both — but that's only
+  been directly confirmed on real Phone calls so far, not FaceTime. Try it and see; if
+  transcription doesn't pick up the other side, the Phone/Continuity path is the well-tested one.
 - **💬 Text** — hands off to `sms:`, opening Messages.app with that conversation ready to go. This
   one does **not** start the Live Call panel — there's no call audio to capture, and it doesn't
   send anything on your behalf; you still type and hit send yourself.
@@ -381,23 +380,27 @@ Setup:
 
 1. One-time build: `npm run build:audiotap` (requires Xcode Command Line Tools — `xcode-select
    --install` if you don't already have them).
-2. That's it — click **Start Call**. The **Process name override** field in the Live Call panel is
-   an advanced/debug option only; leave it blank (it auto-detects the daemon that actually renders
-   call audio, which is *not* the visible Phone/FaceTime app itself — see
-   `native/audiotap/main.swift`'s header comment for why).
+2. That's it — no further configuration. It auto-detects the daemon that actually renders call
+   audio, which is *not* the visible Phone/FaceTime app itself — see `native/audiotap/main.swift`'s
+   header comment for why.
 3. The first time it captures, macOS will show a one-time system permission prompt — approve it
    under System Settings → Privacy & Security → **Screen & System Audio Recording**.
 
 If the helper isn't built yet, or macOS denies the permission, the panel will show what went wrong.
 
-### Using it — recording starts automatically, ends with one click
+### Using it — both starting and ending are one click, neither is automatic
 
-There's no manual "start recording" step: clicking any phone number (in **Property**, see below)
-starts the Live Call panel for you — dial, and transcription/recording are already running by the
-time the other person picks up. **Start Call** still exists as a manual override (e.g. if you
-dial outside the app).
+Dialing any phone number (in **Property**, see below) does **not** start recording/transcription
+by itself — it only selects that property/contact as call context and pops a **full-screen Start
+Call prompt** over the whole window, so the click to actually start it is impossible to miss
+whether you're mid-conversation already or the panel's scrolled out of view. Hit **Start Call**
+there (or dismiss it with **Not now** / ✕ if you're not ready yet — the regular Start Call button
+in the Live Call panel is still there either way). This is deliberate: an earlier version
+auto-started recording the instant you dialed, but that meant a call that had already been going
+for a minute before you picked up the phone from this app got its opening cut off in the
+recording — one manual click (now hard to miss) beats a silent auto-start.
 
-**Ending is manual — click End Call when you hang up.** An earlier version tried to
+**Ending is manual too — click End Call when you hang up.** An earlier version tried to
 auto-detect hangup from the tapped audio going quiet, but macOS doesn't expose real call-state to
 third-party apps, so that was a heuristic guess — and a real, long silence (a rep on hold, a long
 thinking pause) would have ended the call early. One click is simpler and never wrong.

@@ -47,6 +47,12 @@ function App() {
   const [suggestionState, setSuggestionState] = useState(initialSuggestionState)
   const [selectedProperty, setSelectedProperty] = useState(null)
   const [propertyOpen, setPropertyOpen] = useState(false)
+  // Bumped on every dial (see handleCall below) — LiveCallPanel watches
+  // this to pop its full-screen "Start Call" prompt. Doesn't auto-start
+  // recording itself (see LiveCallPanel's header comment on why that was
+  // deliberately reverted) — just makes sure the entry point to start it
+  // manually is impossible to miss right after you dial.
+  const [dialSignal, setDialSignal] = useState(0)
   // Live Transcript is raw, un-curated speech-to-text (see LiveCallPanel's
   // channel comment) — useful to check on, but noisy to have open the
   // whole call, so it starts hidden and is a click away rather than
@@ -141,6 +147,7 @@ function App() {
   function handleCall(property, contact) {
     setSelectedProperty(contact ? { ...property, activeContact: contact } : property)
     setPropertyOpen(false)
+    setDialSignal((n) => n + 1)
   }
 
   // Manual override for when you hit Start Call mid-conversation (already
@@ -277,6 +284,7 @@ function App() {
         onSuggestions={requestSuggestions}
         callType={callType}
         property={selectedProperty}
+        dialSignal={dialSignal}
       />
 
       <PropertyPanel

@@ -25,24 +25,28 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 300
 // supersedes both once its target-process bug was fixed.
 //
 // Both starting and ending are manual (Start Call / End Call) — dialing a
-// phone number from PropertyPanel no longer auto-starts recording/
-// transcription; it only selects the property/contact as call context (see
-// App.jsx's handleCall). An earlier version auto-started on dial and also
-// tried auto-detecting hangup from a volume heuristic in liveCall.js, but
-// the latter risked ending a call early during a real, long silence (a rep
-// on hold, a long thinking pause) — worse than requiring one click each way.
-export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property }) {
+// phone number from PropertyPanel doesn't auto-start recording/
+// transcription, it only selects the property/contact as call context (see
+// App.jsx's handleCall) and bumps `dialSignal`, which pops a full-screen
+// prompt here so the manual Start Call click is impossible to miss right
+// after you dial, without actually starting anything for you. An earlier
+// version auto-started on dial outright, and also tried auto-detecting
+// hangup from a volume heuristic in liveCall.js — the latter risked ending
+// a call early during a real, long silence (a rep on hold, a long thinking
+// pause), worse than requiring one click each way.
+export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property, dialSignal }) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
   const [interimText, setInterimText] = useState('')
   const [autoSuggest, setAutoSuggest] = useState(true)
-  // Empty = let the native helper use its own default (the daemon that
-  // actually renders call audio, not the visible Phone/FaceTime app itself
-  // — see native/audiotap/main.swift's header comment). Only needed as an
-  // override in edge cases.
-  const [nativeProcessName, setNativeProcessName] = useState('')
   const [audiotapStatus, setAudiotapStatus] = useState('')
+  // Full-screen "hit Start Call" prompt — see the dialSignal effect below.
+  // Dialing still doesn't auto-start recording (see this file's header
+  // comment on why that was deliberately reverted), but the entry point to
+  // start it manually needs to be impossible to miss, not buried in a
+  // panel that may be scrolled out of view.
+  const [showStartPrompt, setShowStartPrompt] = useState(false)
   // Post-call popup (see CallSummaryModal.jsx) — status: 'loading' | 'ready'
   // | 'error' | 'empty' (no conversation captured, e.g. a misdial).
   const [summary, setSummary] = useState({ open: false, recordingDir: null, status: 'idle', error: '', analysis: null })
@@ -71,6 +75,28 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   const statusRef = useRef(status)
   useEffect(() => {
     statusRef.current = status
+  }, [status])
+
+  // App.jsx bumps `dialSignal` every time a phone/FaceTime number is
+  // dialed from anywhere in the app (Quick Call, a saved property's
+  // contact, the property list's quick-dial button — see App.jsx's
+  // handleCall). This only opens the full-screen prompt below, not an
+  // auto-start — skips the very first render (dialSignalRef starts equal
+  // to the initial prop) so mounting the panel doesn't itself pop it, and
+  // does nothing if a call's already underway.
+  const dialSignalRef = useRef(dialSignal)
+  useEffect(() => {
+    if (dialSignal === undefined || dialSignal === dialSignalRef.current) return
+    dialSignalRef.current = dialSignal
+    if (statusRef.current === 'idle') setShowStartPrompt(true)
+    // Only dialSignal should retrigger this — status is read via the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialSignal])
+
+  // Once the call actually connects, the full-screen prompt has done its
+  // job — the regular in-panel status/stage-tracker/script take over.
+  useEffect(() => {
+    if (status === 'live') setShowStartPrompt(false)
   }, [status])
 
   function appendEntry(speaker, text) {
@@ -115,7 +141,10 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
       await window.api.liveCall.start(['rep', 'prospect'], {
         callType,
         property,
-        nativeAudioTap: { processName: nativeProcessName.trim() || undefined }
+        // No UI for a process-name override anymore (it was an "advanced,
+        // optional" edge case that never came up) — always let the native
+        // helper auto-detect the call audio daemon, see audioTap.js.
+        nativeAudioTap: {}
       })
     } catch (err) {
       setError(err.message)
@@ -201,88 +230,117 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
     }
   }, [])
 
+  // Who the full-screen prompt (and its "Calling ..." line) should credit
+  // — the specific contact dialed if there is one, else just the property
+  // label, else nothing (a Quick Call with no name given, or no property
+  // context at all).
+  const callingWho = property?.activeContact?.name || property?.label || ''
+
   return (
-    <section className="panel panel--training">
-      <h2>Live Call</h2>
-
-      <label className="field">
-        <span>Process name override (advanced, optional)</span>
-        <input
-          type="text"
-          value={nativeProcessName}
-          onChange={(e) => setNativeProcessName(e.target.value)}
-          disabled={status !== 'idle'}
-          placeholder="leave blank — auto-detects the call audio daemon"
-        />
-      </label>
-
-      <p className="panel__hint">
-        Click <strong>Start Call</strong> below once you&apos;re on the line to begin recording
-        and transcribing, and <strong>End Call</strong> when you hang up. No device setup
-        needed — your mic uses the system default, and your normal speakers/headset keep working
-        the whole time (native audio tap, see <code>native/audiotap</code>). The first time this
-        runs, macOS will ask you to approve audio capture (System Settings → Privacy &amp;
-        Security → Screen &amp; System Audio Recording). If the helper isn&apos;t built yet, run{' '}
-        <code>npm run build:audiotap</code> from the project root.
-      </p>
-
-      {error && <p className="panel__error">{error}</p>}
-      {audiotapStatus && <p className="panel__hint">🎙 {audiotapStatus}</p>}
-
-      <div className="call-button-row">
-        {status === 'live' ? (
-          <button type="button" className="call-button call-button--end" onClick={stop}>
-            End Call
-          </button>
-        ) : (
+    <>
+      {showStartPrompt && (
+        <div className="start-call-overlay" role="dialog" aria-label="Start call">
           <button
             type="button"
-            className="call-button call-button--start"
-            onClick={start}
-            disabled={status === 'connecting'}
+            className="start-call-overlay__close"
+            onClick={() => setShowStartPrompt(false)}
+            aria-label="Dismiss"
           >
-            {status === 'connecting' ? 'Connecting…' : 'Start Call'}
+            ✕
           </button>
-        )}
-      </div>
+          <div className="start-call-overlay__content">
+            {callingWho && <p className="start-call-overlay__who">Calling {callingWho}</p>}
+            {error && <p className="panel__error">{error}</p>}
+            <button
+              type="button"
+              className="call-button call-button--start start-call-overlay__button"
+              onClick={start}
+              disabled={status === 'connecting'}
+            >
+              {status === 'connecting' ? 'Connecting…' : 'Start Call'}
+            </button>
+            <button
+              type="button"
+              className="start-call-overlay__dismiss"
+              onClick={() => setShowStartPrompt(false)}
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
 
-      <div className="training-controls">
-        <button type="button" onClick={handleClear} disabled={!entries.length || status === 'live'}>
-          Clear
-        </button>
-        <button
-          type="button"
-          disabled={!entries.length}
-          onClick={() => onSuggestions(transcriptTextRef.current)}
-        >
-          Get Suggestions Now
-        </button>
-      </div>
+      <section className="panel panel--training">
+        <h2>Live Call</h2>
 
-      <label className="field field--inline">
-        <input
-          type="checkbox"
-          checked={autoSuggest}
-          onChange={(e) => setAutoSuggest(e.target.checked)}
+        <p className="panel__hint">
+          Click <strong>Start Call</strong> below once you&apos;re on the line to begin recording
+          and transcribing, and <strong>End Call</strong> when you hang up. No device setup
+          needed — your mic uses the system default, and your normal speakers/headset keep
+          working the whole time (native audio tap, see <code>native/audiotap</code>). The first
+          time this runs, macOS will ask you to approve audio capture (System Settings → Privacy
+          &amp; Security → Screen &amp; System Audio Recording). If the helper isn&apos;t built
+          yet, run <code>npm run build:audiotap</code> from the project root.
+        </p>
+
+        {error && <p className="panel__error">{error}</p>}
+        {audiotapStatus && <p className="panel__hint">🎙 {audiotapStatus}</p>}
+
+        <div className="call-button-row">
+          {status === 'live' ? (
+            <button type="button" className="call-button call-button--end" onClick={stop}>
+              End Call
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="call-button call-button--start"
+              onClick={start}
+              disabled={status === 'connecting'}
+            >
+              {status === 'connecting' ? 'Connecting…' : 'Start Call'}
+            </button>
+          )}
+        </div>
+
+        <div className="training-controls">
+          <button type="button" onClick={handleClear} disabled={!entries.length || status === 'live'}>
+            Clear
+          </button>
+          <button
+            type="button"
+            disabled={!entries.length}
+            onClick={() => onSuggestions(transcriptTextRef.current)}
+          >
+            Get Suggestions Now
+          </button>
+        </div>
+
+        <label className="field field--inline">
+          <input
+            type="checkbox"
+            checked={autoSuggest}
+            onChange={(e) => setAutoSuggest(e.target.checked)}
+          />
+          <span>Auto-request suggestions after the prospect speaks (uses the Claude API each time)</span>
+        </label>
+
+        {interimText && <p className="panel__hint">…{interimText}</p>}
+        <p className="panel__hint">
+          Status: {status}
+          {status === 'live' && ' · ● Recording'}
+          {entries.length > 0 && ` · ${entries.length} lines`}
+        </p>
+
+        <CallSummaryModal
+          open={summary.open}
+          recordingDir={summary.recordingDir}
+          status={summary.status}
+          error={summary.error}
+          analysis={summary.analysis}
+          onClose={() => setSummary((s) => ({ ...s, open: false }))}
         />
-        <span>Auto-request suggestions after the prospect speaks (uses the Claude API each time)</span>
-      </label>
-
-      {interimText && <p className="panel__hint">…{interimText}</p>}
-      <p className="panel__hint">
-        Status: {status}
-        {status === 'live' && ' · ● Recording'}
-        {entries.length > 0 && ` · ${entries.length} lines`}
-      </p>
-
-      <CallSummaryModal
-        open={summary.open}
-        recordingDir={summary.recordingDir}
-        status={summary.status}
-        error={summary.error}
-        analysis={summary.analysis}
-        onClose={() => setSummary((s) => ({ ...s, open: false }))}
-      />
-    </section>
+      </section>
+    </>
   )
 }
