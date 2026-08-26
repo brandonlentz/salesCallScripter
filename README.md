@@ -214,6 +214,16 @@ Beyond the generic script, the suggestion engine can be grounded in specifics ab
 and contact for this call — deceased owner, tax/legal status, known heirs, prior contact notes,
 offer amount — pulled from your REISift records.
 
+### Quick Call — when the property doesn't need to be on file
+
+The **Property** drawer has two tabs: **Saved Properties** (below) and **Quick Call**. Quick Call
+is for a fast follow-up where grounding the AI in a specific property record isn't worth the
+overhead — a callback, a number you already have from a text, anything short. Enter a phone
+number (a name is optional but helps — it grounds the suggestion engine's "YOU ARE CALLING" line
+the same way a saved contact's name would) and hit **Call**, **FaceTime**, or **Text**. Nothing is
+saved to the property store; it's just enough context for that one call. Live Call/recording still
+works exactly the same way.
+
 **Records sync live from REISift via an outbound webhook** — no more copy/paste for properties
 REISift already knows about. REISift doesn't publish a pull/search API, but it does support
 outbound webhooks (Settings → Integrations → Webhooks, fired from a sequence's "Webhook" action),

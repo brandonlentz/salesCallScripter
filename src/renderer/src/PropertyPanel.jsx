@@ -58,6 +58,9 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [reisiftStatus, setReisiftStatus] = useState('')
+  const [tab, setTab] = useState('properties') // 'properties' | 'quick'
+  const [quickName, setQuickName] = useState('')
+  const [quickNumber, setQuickNumber] = useState('')
 
   async function refresh(q) {
     setResults(await window.api.properties.search(q))
@@ -168,6 +171,24 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
     window.api.dialer.text(phoneNumber)
   }
 
+  // Quick Call tab (see below) — for a fast follow-up where there's no
+  // saved property to pick and it's not worth creating one just to dial a
+  // number. Builds the same minimal property/contact shape a saved
+  // property's contact would carry (see buildPropertyContext in
+  // nepqPrompt.js), so the suggestion engine still gets a name to address
+  // if one's given — it just isn't backed by an id or persisted anywhere.
+  function handleQuickCall(action) {
+    const number = quickNumber.trim()
+    if (!number) return
+    const name = quickName.trim()
+    const contact = { name, relationship: '', phones: [{ number, label: '' }] }
+    const property = { label: name || number, contacts: [contact] }
+    onCall(property, contact)
+    if (action === 'call') window.api.dialer.call(number)
+    else if (action === 'facetime') window.api.dialer.facetime(number)
+    else window.api.dialer.text(number)
+  }
+
   // Tags a number's call outcome from the "selected property" quick view
   // (see below) — separate from the edit form's updatePhone, which only
   // touches local draft state, because this fires while the drawer is
@@ -271,7 +292,70 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
           {view === 'list' ? (
             <>
               {reisiftStatus && <p className="panel__hint">🔄 {reisiftStatus}</p>}
-              {selected && (
+
+              <div className="mode-toggle">
+                <button
+                  type="button"
+                  className={tab === 'properties' ? 'is-active' : ''}
+                  onClick={() => setTab('properties')}
+                >
+                  Saved Properties
+                </button>
+                <button
+                  type="button"
+                  className={tab === 'quick' ? 'is-active' : ''}
+                  onClick={() => setTab('quick')}
+                >
+                  Quick Call
+                </button>
+              </div>
+
+              {tab === 'quick' && (
+                <div className="quick-call">
+                  <p className="panel__hint">
+                    For a fast follow-up where the property doesn&apos;t need to be on file — dial
+                    a number directly, no property record required. Give it a name if you have one
+                    (grounds the suggestion engine's YOU ARE CALLING line the same way a saved
+                    contact's name does); leave it blank and the script stays fully generic.
+                  </p>
+                  <label className="field">
+                    <span>Name (optional)</span>
+                    <input
+                      type="text"
+                      value={quickName}
+                      onChange={(e) => setQuickName(e.target.value)}
+                      placeholder="e.g. Carmelo"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Phone number</span>
+                    <input
+                      type="text"
+                      value={quickNumber}
+                      onChange={(e) => setQuickNumber(e.target.value)}
+                      placeholder="e.g. 555-123-4567"
+                      autoFocus
+                    />
+                  </label>
+                  <div className="quick-call__actions">
+                    <button type="button" onClick={() => handleQuickCall('call')} disabled={!quickNumber.trim()}>
+                      📞 Call
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCall('facetime')}
+                      disabled={!quickNumber.trim()}
+                    >
+                      🎥 FaceTime
+                    </button>
+                    <button type="button" onClick={() => handleQuickCall('text')} disabled={!quickNumber.trim()}>
+                      💬 Text
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tab === 'properties' && selected && (
                 <div className="property-selected">
                   <div className="property-selected__header">
                     <div className="property-selected__label">
@@ -324,19 +408,24 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
                                     >
                                       💬
                                     </button>
-                                    <select
-                                      className="phone-status"
-                                      value={p.status ?? ''}
-                                      onChange={(e) => handlePhoneStatus(i, pi, e.target.value)}
-                                      title="Call outcome"
-                                      aria-label={`Call outcome for ${label}`}
-                                    >
-                                      {PHONE_STATUSES.map((s) => (
-                                        <option key={s.value} value={s.value}>
-                                          {s.icon ? `${s.icon} ${s.label}` : s.label}
-                                        </option>
-                                      ))}
-                                    </select>
+                                    {/* Only a saved property has an id to persist a status
+                                        update against — a Quick Call's synthetic property
+                                        (see handleQuickCall) has nothing to save it to. */}
+                                    {selected.id && (
+                                      <select
+                                        className="phone-status"
+                                        value={p.status ?? ''}
+                                        onChange={(e) => handlePhoneStatus(i, pi, e.target.value)}
+                                        title="Call outcome"
+                                        aria-label={`Call outcome for ${label}`}
+                                      >
+                                        {PHONE_STATUSES.map((s) => (
+                                          <option key={s.value} value={s.value}>
+                                            {s.icon ? `${s.icon} ${s.label}` : s.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
                                   </span>
                                 )
                               })
@@ -349,60 +438,64 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
                 </div>
               )}
 
-              <input
-                type="text"
-                className="property-search"
-                placeholder="Search by name, address, or phone…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
+              {tab === 'properties' && (
+                <>
+                  <input
+                    type="text"
+                    className="property-search"
+                    placeholder="Search by name, address, or phone…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
 
-              <button type="button" onClick={startCreate}>
-                + New Property
-              </button>
+                  <button type="button" onClick={startCreate}>
+                    + New Property
+                  </button>
 
-              {results.length === 0 ? (
-                <p className="panel__placeholder">
-                  {query ? 'No matches.' : 'No properties saved yet — click "New Property" to add one.'}
-                </p>
-              ) : (
-                <ul className="property-list">
-                  {results.map((p) => {
-                    const phones = allPhones(p)
-                    const first = phones[0]
-                    const primaryContactName = p.contacts?.[0]?.name
-                    return (
-                      <li
-                        key={p.id}
-                        className={`property-list__item${selected?.id === p.id ? ' is-selected' : ''}`}
-                      >
-                        <button type="button" className="property-list__main" onClick={() => onSelect(p)}>
-                          <strong>{p.label}</strong>
-                          {(p.propertyAddress || primaryContactName) && (
-                            <span>
-                              {[primaryContactName, p.propertyAddress].filter(Boolean).join(' — ')}
-                            </span>
-                          )}
-                        </button>
-                        {first && (
-                          <button
-                            type="button"
-                            onClick={() => handleCall(p, first.contact, first.phone.number)}
-                            title={`Call ${first.contact.name || 'contact'}: ${first.phone.number}`}
+                  {results.length === 0 ? (
+                    <p className="panel__placeholder">
+                      {query ? 'No matches.' : 'No properties saved yet — click "New Property" to add one.'}
+                    </p>
+                  ) : (
+                    <ul className="property-list">
+                      {results.map((p) => {
+                        const phones = allPhones(p)
+                        const first = phones[0]
+                        const primaryContactName = p.contacts?.[0]?.name
+                        return (
+                          <li
+                            key={p.id}
+                            className={`property-list__item${selected?.id === p.id ? ' is-selected' : ''}`}
                           >
-                            📞{phones.length > 1 ? ` (${phones.length})` : ''}
-                          </button>
-                        )}
-                        <button type="button" onClick={() => startEdit(p)}>
-                          Edit
-                        </button>
-                        <button type="button" onClick={() => handleDelete(p.id)}>
-                          Delete
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
+                            <button type="button" className="property-list__main" onClick={() => onSelect(p)}>
+                              <strong>{p.label}</strong>
+                              {(p.propertyAddress || primaryContactName) && (
+                                <span>
+                                  {[primaryContactName, p.propertyAddress].filter(Boolean).join(' — ')}
+                                </span>
+                              )}
+                            </button>
+                            {first && (
+                              <button
+                                type="button"
+                                onClick={() => handleCall(p, first.contact, first.phone.number)}
+                                title={`Call ${first.contact.name || 'contact'}: ${first.phone.number}`}
+                              >
+                                📞{phones.length > 1 ? ` (${phones.length})` : ''}
+                              </button>
+                            )}
+                            <button type="button" onClick={() => startEdit(p)}>
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => handleDelete(p.id)}>
+                              Delete
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </>
               )}
             </>
           ) : (
