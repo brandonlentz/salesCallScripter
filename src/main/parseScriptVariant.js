@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { recordUsage } from './usageTracker.js'
 
 // A script variant's sections are the same {stage, title, lines} shape as
 // the hardcoded CALL_SCRIPTS in shared/callScripts.js — see formatScript()
@@ -76,6 +77,8 @@ export async function parseScriptVariant(rawText) {
     output_config: { format: { type: 'json_schema', schema: SCRIPT_SCHEMA } },
     messages: [{ role: 'user', content: rawText.trim().slice(0, 150000) }]
   })
+
+  recordUsage({ source: 'script-variant-parse', model: 'claude-haiku-4-5', usage: message.usage })
 
   if (message.stop_reason === 'max_tokens') {
     throw new Error('Parser response was cut off before finishing — try pasting a shorter script.')

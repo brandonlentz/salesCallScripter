@@ -5,6 +5,7 @@ import ScriptPanel from './ScriptPanel'
 import PropertyPanel from './PropertyPanel'
 import ScriptVariantPanel from './ScriptVariantPanel'
 import NepqReferencePanel from './NepqReferencePanel'
+import UsageMeter from './UsageMeter'
 
 const ORIGINAL_VARIANT = { id: 'original', label: 'Original' }
 
@@ -158,6 +159,7 @@ function App() {
           <button type="button" onClick={() => setPropertyOpen(true)}>
             {selectedProperty ? `Property: ${selectedProperty.label}` : 'Property'}
           </button>
+          <UsageMeter />
         </div>
       </header>
 

@@ -64,6 +64,19 @@ const api = {
       ipcRenderer.on('live-call:audiotap-status', listener)
       return () => ipcRenderer.removeListener('live-call:audiotap-status', listener)
     }
+  },
+  usage: {
+    // One-shot pull of everything recorded so far — for seeding UI state on
+    // mount, since the live push below only reaches a window that's already
+    // listening (see usageTracker.js).
+    get: () => ipcRenderer.invoke('usage:get'),
+    // Fires on every Claude API call across the app (see usageTracker.js's
+    // call sites) with the new event plus the updated running totals.
+    onUpdate: (callback) => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('usage:update', listener)
+      return () => ipcRenderer.removeListener('usage:update', listener)
+    }
   }
 }
 

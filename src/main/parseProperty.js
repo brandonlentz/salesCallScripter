@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { recordUsage } from './usageTracker.js'
 
 // Scalar fields — same as the manual form in PropertyPanel.jsx / the local
 // store in properties.js. `contacts` is handled separately below since it's
@@ -136,6 +137,8 @@ export async function parsePropertyText(rawText) {
     // something absurd, not a realistic ceiling for either input kind.
     messages: [{ role: 'user', content: cleaned.slice(0, 150000) }]
   })
+
+  recordUsage({ source: 'property-parse', model: 'claude-haiku-4-5', usage: message.usage })
 
   const block = message.content.find((b) => b.type === 'text')
   if (!block) {

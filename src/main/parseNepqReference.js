@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { recordUsage } from './usageTracker.js'
 
 // Distills an uploaded PDF (NEPQ framework material — Jeremy Miner training
 // docs or similar) into organized reference notes for the suggestion
@@ -67,6 +68,8 @@ export async function parseNepqReference(base64, filename) {
       }
     ]
   })
+
+  recordUsage({ source: 'nepq-reference-parse', model: 'claude-opus-5', usage: message.usage })
 
   if (message.stop_reason === 'max_tokens') {
     throw new Error(

@@ -17,6 +17,7 @@ import { parseScriptVariant } from './parseScriptVariant.js'
 import { listReferences, saveReference, deleteReference } from './nepqReferences.js'
 import { parseNepqReference } from './parseNepqReference.js'
 import { analyzeCall } from './callAnalysis.js'
+import { initUsageTracker, getUsageSnapshot } from './usageTracker.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -108,10 +109,12 @@ function registerIpcHandlers() {
   ipcMain.handle('dialer:text', (_event, phoneNumber) => {
     shell.openExternal(`sms:${digitsOnly(phoneNumber)}`)
   })
+  ipcMain.handle('usage:get', () => getUsageSnapshot())
   registerLiveCallHandlers(() => mainWindow, appRootDir)
 }
 
 app.whenReady().then(() => {
+  initUsageTracker(() => mainWindow)
   registerIpcHandlers()
   createWindow()
 

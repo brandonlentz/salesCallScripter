@@ -3,6 +3,7 @@ import { buildSystemPrompt, buildPropertyContext } from './nepqPrompt.js'
 import { CALL_TYPES, CALL_SCRIPTS, getStageIds } from '../shared/callScripts.js'
 import { getVariant } from './scriptVariants.js'
 import { getAllReferenceContent } from './nepqReferences.js'
+import { recordUsage } from './usageTracker.js'
 
 const MAX_TOKENS = 700
 
@@ -84,6 +85,11 @@ export async function getSuggestions(
       }
     ]
   })
+
+  // This is the recurring call — fires roughly every time the prospect
+  // finishes a sentence during a live call — so it's the main driver of the
+  // real-time usage meter (see usageTracker.js/UsageMeter.jsx).
+  recordUsage({ source: 'suggestion', model: 'claude-haiku-4-5', usage: message.usage })
 
   const raw = message.content
     .filter((block) => block.type === 'text')

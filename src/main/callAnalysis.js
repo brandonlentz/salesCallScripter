@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { CALL_SCRIPTS } from '../shared/callScripts.js'
 import { getAllReferenceContent } from './nepqReferences.js'
+import { recordUsage } from './usageTracker.js'
 
 // Post-call coaching analysis: grades the rep's performance on a finished
 // call transcript against Jeremy Miner's NEPQ framework, shown in the
@@ -81,6 +82,8 @@ export async function analyzeCall(transcriptText, callType) {
     output_config: { format: { type: 'json_schema', schema: ANALYSIS_SCHEMA } },
     messages: [{ role: 'user', content: `Call transcript:\n\n${transcriptText}` }]
   })
+
+  recordUsage({ source: 'call-analysis', model: 'claude-opus-5', usage: message.usage })
 
   if (message.stop_reason === 'max_tokens') {
     throw new Error('Call analysis was cut off before finishing.')

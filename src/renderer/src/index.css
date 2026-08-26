@@ -57,6 +57,63 @@ body {
   align-self: flex-end;
 }
 
+.usage-meter {
+  position: relative;
+  align-self: flex-end;
+}
+
+.usage-meter__summary {
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-meter__details {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 10;
+  background: #1c1f25;
+  border: 1px solid #33373f;
+  border-radius: 8px;
+  padding: 0.75rem;
+  width: 380px;
+  max-width: 80vw;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.usage-meter__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+  color: #9a9fa6;
+  margin-bottom: 0.5rem;
+}
+
+.usage-meter__table-wrap {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.usage-meter__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.usage-meter__table th,
+.usage-meter__table td {
+  text-align: left;
+  padding: 0.2rem 0.4rem;
+  white-space: nowrap;
+}
+
+.usage-meter__table th {
+  color: #9a9fa6;
+  font-weight: 500;
+  border-bottom: 1px solid #33373f;
+}
+
 .mode-toggle {
   display: flex;
   border: 1px solid #33373f;
