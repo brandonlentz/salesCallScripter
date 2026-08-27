@@ -322,8 +322,8 @@ Each contact's number in the expanded **Property** panel has three buttons:
 
 - **📞 Call** — hands off to macOS's `tel:` handler (the Phone app / Continuity Dialer — the same
   app this whole live-call setup already routes audio through) and pops the full-screen Start Call
-  prompt — see [Using it — both starting and ending are one click, neither is
-  automatic](#using-it--both-starting-and-ending-are-one-click-neither-is-automatic) above.
+  prompt — see [Using it — Start Call is manual; End Call usually is
+  too](#using-it--start-call-is-manual-end-call-usually-is-too) above.
 - **🎥 FaceTime** — hands off to `facetime:`, opens FaceTime.app, and pops the same prompt (it's
   still a "call" for coaching purposes). The native tap likely captures FaceTime audio too — the
   same underlying daemon (`com.apple.avconferenced`) is believed to handle both — but that's only
@@ -388,7 +388,7 @@ Setup:
 
 If the helper isn't built yet, or macOS denies the permission, the panel will show what went wrong.
 
-### Using it — both starting and ending are one click, neither is automatic
+### Using it — Start Call is manual; End Call usually is too
 
 Dialing any phone number (in **Property**, see below) does **not** start recording/transcription
 by itself — it only selects that property/contact as call context and pops a **full-screen Start
@@ -417,10 +417,15 @@ The prompt also carries everything you'd otherwise have to leave it to find:
   stay bracketed for you to fill in out loud. Each has a **📋 Copy** button so the SMS scripts can
   go straight into Messages.app after tapping **Text**, no retyping or hand-selecting text.
 
-**Ending is manual too — click End Call when you hang up.** An earlier version tried to
-auto-detect hangup from the tapped audio going quiet, but macOS doesn't expose real call-state to
-third-party apps, so that was a heuristic guess — and a real, long silence (a rep on hold, a long
-thinking pause) would have ended the call early. One click is simpler and never wrong.
+**Ending is normally manual — click End Call when you hang up — with one narrow exception: a call
+auto-ends after 5 minutes with nothing transcribed from the prospect's side** (`AUTO_END_SILENCE_MS`
+in `LiveCallPanel.jsx`) — hold music, dead air, or a call left connected and forgotten. This is
+deliberately much narrower than an earlier, reverted attempt at auto-detecting hangup from the
+tapped audio simply going quiet: that watched raw volume and could fire during a real, legitimate
+silence within an active conversation (a rep on hold, a long thinking pause). This one only
+watches the **prospect channel's own transcript** — any sign they're talking, even an
+un-finalized fragment, resets the 5-minute clock — so a real back-and-forth essentially never
+triggers it.
 
 1. Pick the right **Call type** before dialing (or after — the suggestion engine picks it up
    either way). Dial a contact's number from **Property** — see [Property Context](#property-context).

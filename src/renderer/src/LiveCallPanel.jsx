@@ -10,6 +10,18 @@ import { VOICEMAIL_SCRIPTS, SMS_SCRIPTS, fillScript } from '../../shared/outreac
 // back-to-back final fragments settle before firing.
 const AUTO_SUGGEST_DEBOUNCE_MS = 300
 
+// Auto-End on silence — explicitly requested, and deliberately narrower
+// than the volume-heuristic that was tried and reverted before (see this
+// file's header comment): that one watched raw audio level and could fire
+// during a real, legitimate silence within a live conversation (a rep on
+// hold, a long thinking pause). This one only watches the 'prospect'
+// channel's own transcript — interim or final, any sign they're actually
+// talking resets it (see the onTranscript handler in start()) — and 5
+// minutes with literally nothing transcribed from them is long enough that
+// a real back-and-forth essentially never triggers it; it's for a call
+// that's gone to hold music, dead air, or was left connected and forgotten.
+const AUTO_END_SILENCE_MS = 5 * 60 * 1000
+
 // Captures live-call audio and streams it to Deepgram via the main process.
 // Native audio capture only (see native/audiotap): a native Core Audio
 // process tap captures the call app's audio directly — no BlackHole/virtual
@@ -26,16 +38,25 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 300
 // actively harmful (interfered with real call audio), and native tap
 // supersedes both once its target-process bug was fixed.
 //
-// Both starting and ending are manual (Start Call / End Call) — dialing a
-// phone number from PropertyPanel doesn't auto-start recording/
-// transcription, it only selects the property/contact as call context (see
-// App.jsx's handleCall) and bumps `dialSignal`, which pops a full-screen
-// prompt here so the manual Start Call click is impossible to miss right
-// after you dial, without actually starting anything for you. An earlier
-// version auto-started on dial outright, and also tried auto-detecting
-// hangup from a volume heuristic in liveCall.js — the latter risked ending
-// a call early during a real, long silence (a rep on hold, a long thinking
-// pause), worse than requiring one click each way.
+// Starting is manual (Start Call) — dialing a phone number from
+// PropertyPanel doesn't auto-start recording/transcription, it only
+// selects the property/contact as call context (see App.jsx's handleCall)
+// and bumps `dialSignal`, which pops a full-screen prompt here so the
+// manual Start Call click is impossible to miss right after you dial,
+// without actually starting anything for you. An earlier version
+// auto-started on dial outright — reverted for the same reason ending was
+// kept manual for a long time (see AUTO_END_SILENCE_MS above for why that
+// changed): a call that's already underway when you open the app shouldn't
+// be silently assumed to be starting fresh.
+//
+// Ending is now automatic ONLY on the narrow AUTO_END_SILENCE_MS condition
+// above (5 minutes with nothing transcribed from the prospect) — otherwise
+// still manual (End Call). An earlier version tried auto-detecting hangup
+// from a raw volume heuristic in liveCall.js, which risked ending a call
+// early during a real, long silence (a rep on hold, a long thinking
+// pause); that approach was reverted, not this one — this one has enough
+// margin (5 minutes, transcript-based, resets on the slightest interim
+// word) that it shouldn't collide with a genuine conversation.
 export default function LiveCallPanel({
   onTranscriptChange,
   onSuggestions,
@@ -70,6 +91,7 @@ export default function LiveCallPanel({
   const streamsRef = useRef({}) // channel -> MediaStream, call-scoped (torn down on stop())
   const debounceRef = useRef(null)
   const unsubscribeRef = useRef([])
+  const autoEndTimerRef = useRef(null) // see AUTO_END_SILENCE_MS above
 
   const transcriptText = entries
     .map((e) => `${e.speaker === 'rep' ? 'You' : 'Them'}: ${e.text}`)
@@ -113,6 +135,22 @@ export default function LiveCallPanel({
   useEffect(() => {
     if (status === 'live') setShowStartPrompt(false)
   }, [status])
+
+  // (Re)starts the AUTO_END_SILENCE_MS countdown — called once when a call
+  // goes live, then again on any sign the prospect is talking (interim or
+  // final transcript, see the onTranscript handler in start()). Reads
+  // statusRef rather than `status` since this can fire from a timer
+  // callback well after the render that scheduled it.
+  function scheduleAutoEnd() {
+    clearTimeout(autoEndTimerRef.current)
+    autoEndTimerRef.current = setTimeout(() => {
+      if (statusRef.current !== 'live') return
+      setError(
+        `Call auto-ended: no response from the other side detected for ${AUTO_END_SILENCE_MS / 60000} minutes.`
+      )
+      stop()
+    }, AUTO_END_SILENCE_MS)
+  }
 
   function appendEntry(speaker, text) {
     setEntries((prev) => [...prev, { speaker, text }])
@@ -182,6 +220,9 @@ export default function LiveCallPanel({
 
     const offTranscript = window.api.liveCall.onTranscript(({ channel, text, isFinal }) => {
       if (!text) return
+      // Any sign the prospect is talking — even a not-yet-final fragment —
+      // resets the auto-end countdown (see AUTO_END_SILENCE_MS above).
+      if (channel === 'prospect') scheduleAutoEnd()
       if (!isFinal) {
         setInterimText(text)
         return
@@ -193,6 +234,11 @@ export default function LiveCallPanel({
     const offAudiotapStatus = window.api.liveCall.onAudiotapStatus((message) => setAudiotapStatus(message))
     unsubscribeRef.current = [offTranscript, offError, offAudiotapStatus]
 
+    // Starts the AUTO_END_SILENCE_MS countdown from the moment the call
+    // goes live, not from the first prospect word — a call that connects
+    // and then hears nothing at all for 5 minutes (hold music, dead air)
+    // should still auto-end.
+    scheduleAutoEnd()
     setStatus('live')
   }
 
@@ -205,6 +251,7 @@ export default function LiveCallPanel({
     recordersRef.current = {}
     streamsRef.current = {}
     clearTimeout(debounceRef.current)
+    clearTimeout(autoEndTimerRef.current)
     unsubscribeRef.current.forEach((off) => off())
     unsubscribeRef.current = []
 
@@ -255,6 +302,7 @@ export default function LiveCallPanel({
       Object.values(recordersRef.current).forEach((r) => r.stop())
       Object.values(streamsRef.current).forEach((s) => s.getTracks().forEach((t) => t.stop()))
       unsubscribeRef.current.forEach((off) => off())
+      clearTimeout(autoEndTimerRef.current)
     }
   }, [])
 
@@ -386,7 +434,9 @@ export default function LiveCallPanel({
           working the whole time (native audio tap, see <code>native/audiotap</code>). The first
           time this runs, macOS will ask you to approve audio capture (System Settings → Privacy
           &amp; Security → Screen &amp; System Audio Recording). If the helper isn&apos;t built
-          yet, run <code>npm run build:audiotap</code> from the project root.
+          yet, run <code>npm run build:audiotap</code> from the project root. A call auto-ends if
+          nothing's transcribed from the other side for 5 minutes straight (hold music, dead air,
+          or a call left connected and forgotten) — any sign they're talking resets that clock.
         </p>
 
         {error && <p className="panel__error">{error}</p>}
