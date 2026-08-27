@@ -408,12 +408,14 @@ The prompt also carries everything you'd otherwise have to leave it to find:
   same number — same call-outcome tag as the Property drawer's phone list (see [Multiple contacts,
   multiple numbers](#multiple-contacts-multiple-numbers)), settable right here without opening it.
   Only shown for a saved property; a Quick Call has no record to tag it against.
-- **Voicemail scripts** (`src/shared/voicemailScripts.js`) — word-for-word "1st Attempt" / "3rd
-  Attempt" scripts for when it goes to voicemail, with the contact's name and the deceased owner's
-  name filled in automatically from whatever property/contact is selected (falling back to the
-  same `[NAME]`/`[DECEASED]` bracket convention as the staged call scripts when nothing's on file).
-  A couple of things — a specific county, 1-2 identifying details connecting the contact to the
-  deceased — aren't on file for any property and stay bracketed for you to fill in out loud.
+- **Voicemail and SMS scripts** (`src/shared/outreachScripts.js`) — word-for-word "1st Attempt" /
+  "3rd Attempt" voicemail scripts plus three short SMS follow-ups ("1st/2nd/3rd Attempt"), with the
+  contact's name and the deceased owner's name filled in automatically from whatever property/
+  contact is selected (falling back to the same `[NAME]`/`[DECEASED]` bracket convention as the
+  staged call scripts when nothing's on file). A couple of things — a specific county, 1-2
+  identifying details connecting the contact to the deceased — aren't on file for any property and
+  stay bracketed for you to fill in out loud. Each has a **📋 Copy** button so the SMS scripts can
+  go straight into Messages.app after tapping **Text**, no retyping or hand-selecting text.
 
 **Ending is manual too — click End Call when you hang up.** An earlier version tried to
 auto-detect hangup from the tapped audio going quiet, but macOS doesn't expose real call-state to

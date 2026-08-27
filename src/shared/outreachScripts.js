@@ -1,17 +1,19 @@
-// Word-for-word scripts for when a call goes to voicemail or just isn't
-// answered — same "ground truth over improvisation" philosophy as the
-// staged call scripts in callScripts.js, but shown in the full-screen
-// Start Call prompt (see LiveCallPanel.jsx) rather than the Script panel,
-// since they're not tied to a call stage — they're for the "no one picked
-// up" branch of any call type.
+// Word-for-word voicemail and SMS scripts for when a call goes unanswered
+// — same "ground truth over improvisation" philosophy as the staged call
+// scripts in callScripts.js, but shown in the full-screen Start Call prompt
+// (see LiveCallPanel.jsx) rather than the Script panel, since they're not
+// tied to a call stage — they're for the "no one picked up" branch of any
+// call type. Each has a Copy button there so it can be pasted straight into
+// Messages.app after tapping Text, rather than retyped or hand-selected out
+// of a <pre> block.
 //
 // Unlike callScripts.js's [NAME]/[DECEASED]-style brackets (which the rep
 // always fills in out loud, even when the app could theoretically know the
 // answer), {contactName}/{deceasedName} here ARE resolved from whichever
-// property/contact is currently selected — see fillVoicemailScript. What's
-// left as a bracket is only what genuinely isn't on file for any property
-// (a specific county, 1-2 identifying details connecting the contact to
-// the deceased) — the rep fills those in the same way as callScripts.js.
+// property/contact is currently selected — see fillScript. What's left as
+// a bracket is only what genuinely isn't on file for any property (a
+// specific county, 1-2 identifying details connecting the contact to the
+// deceased) — the rep fills those in the same way as callScripts.js.
 export const REP_NAME = 'Brandon'
 
 export const VOICEMAIL_SCRIPTS = [
@@ -43,10 +45,31 @@ Thanks again…`
   }
 ]
 
+// Short follow-up texts, meant to be sent after (or instead of) leaving a
+// voicemail — SMS 1st Attempt pairs with the voicemail above ("the message
+// above" it refers to), 2nd/3rd are for when even that goes unanswered.
+export const SMS_SCRIPTS = [
+  {
+    id: 'sms-1',
+    label: 'SMS 1st Attempt',
+    template: `This is ${REP_NAME} trying to get a hold of {contactName}. Easier to explain in the message above.`
+  },
+  {
+    id: 'sms-2',
+    label: 'SMS 2nd Attempt',
+    template: `Is there someone else I can reach about {contactName} or do I have the wrong number?`
+  },
+  {
+    id: 'sms-3',
+    label: 'SMS 3rd Attempt',
+    template: `Obviously this isn't a good time to speak. Call me back when it is.`
+  }
+]
+
 // `contactName`/`deceasedName` fall back to the same bracket convention as
 // callScripts.js when nothing's on file — e.g. a Quick Call with no name
 // given, or a property with no deceased owner recorded.
-export function fillVoicemailScript(template, { contactName, deceasedName } = {}) {
+export function fillScript(template, { contactName, deceasedName } = {}) {
   return template
     .replaceAll('{contactName}', contactName?.trim() || '[NAME]')
     .replaceAll('{deceasedName}', deceasedName?.trim() || '[DECEASED]')

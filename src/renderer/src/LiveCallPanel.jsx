@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import CallSummaryModal from './CallSummaryModal'
 import { PHONE_STATUSES } from './phoneStatuses.js'
-import { VOICEMAIL_SCRIPTS, fillVoicemailScript } from '../../shared/voicemailScripts.js'
+import { VOICEMAIL_SCRIPTS, SMS_SCRIPTS, fillScript } from '../../shared/outreachScripts.js'
 
 // Deepgram only marks a channel entry final at a genuine pause, so there's
 // little upside in waiting long after that to ask for suggestions — every
@@ -56,6 +56,12 @@ export default function LiveCallPanel({
   // start it manually needs to be impossible to miss, not buried in a
   // panel that may be scrolled out of view.
   const [showStartPrompt, setShowStartPrompt] = useState(false)
+  // Which outreach script (see outreachScripts.js) most recently got
+  // copied — drives a transient "Copied!" label on that one Copy button.
+  // Keyed by script id rather than a plain boolean so copying one script
+  // right after another doesn't leave a stale confirmation on the wrong
+  // button.
+  const [copiedScriptId, setCopiedScriptId] = useState('')
   // Post-call popup (see CallSummaryModal.jsx) — status: 'loading' | 'ready'
   // | 'error' | 'empty' (no conversation captured, e.g. a misdial).
   const [summary, setSummary] = useState({ open: false, recordingDir: null, status: 'idle', error: '', analysis: null })
@@ -231,6 +237,19 @@ export default function LiveCallPanel({
     setEntries([])
   }
 
+  // Copies a filled-in outreach script (see outreachScripts.js) to the
+  // clipboard so it can be pasted straight into Messages.app after tapping
+  // Text, rather than retyped or hand-selected out of a <pre> block.
+  async function handleCopy(id, text) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedScriptId(id)
+      setTimeout(() => setCopiedScriptId((current) => (current === id ? '' : current)), 1500)
+    } catch (err) {
+      setError(`Could not copy to clipboard: ${err.message}`)
+    }
+  }
+
   useEffect(() => {
     return () => {
       Object.values(recordersRef.current).forEach((r) => r.stop())
@@ -255,6 +274,31 @@ export default function LiveCallPanel({
         .flatMap((c) => c.phones ?? [])
         .find((p) => p.number === property.dialedNumber)?.status ?? ''
     : ''
+
+  // One outreach-script card (voicemail or SMS — see outreachScripts.js),
+  // filled in from whatever property/contact is currently selected, with a
+  // Copy button for pasting straight into Messages.app after tapping Text.
+  function renderScriptCard(script) {
+    const filled = fillScript(script.template, {
+      contactName: property?.activeContact?.name,
+      deceasedName: property?.deceasedName
+    })
+    return (
+      <div key={script.id} className="voicemail-script">
+        <div className="voicemail-script__header">
+          <p className="voicemail-script__label">{script.label}</p>
+          <button
+            type="button"
+            className="voicemail-script__copy"
+            onClick={() => handleCopy(script.id, filled)}
+          >
+            {copiedScriptId === script.id ? 'Copied!' : '📋 Copy'}
+          </button>
+        </div>
+        <pre className="voicemail-script__text">{filled}</pre>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -323,17 +367,10 @@ export default function LiveCallPanel({
             </button>
 
             <div className="start-call-overlay__scripts">
-              {VOICEMAIL_SCRIPTS.map((script) => (
-                <div key={script.id} className="voicemail-script">
-                  <p className="voicemail-script__label">{script.label}</p>
-                  <pre className="voicemail-script__text">
-                    {fillVoicemailScript(script.template, {
-                      contactName: property?.activeContact?.name,
-                      deceasedName: property?.deceasedName
-                    })}
-                  </pre>
-                </div>
-              ))}
+              <p className="start-call-overlay__scripts-heading">Voicemail scripts</p>
+              {VOICEMAIL_SCRIPTS.map(renderScriptCard)}
+              <p className="start-call-overlay__scripts-heading">Text message scripts</p>
+              {SMS_SCRIPTS.map(renderScriptCard)}
             </div>
           </div>
         </div>
