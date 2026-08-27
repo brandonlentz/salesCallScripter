@@ -394,10 +394,14 @@ body {
   z-index: 100;
   background: rgba(10, 11, 13, 0.92);
   display: flex;
-  align-items: center;
+  /* flex-start, not center: the voicemail scripts can run long, and
+     centering the whole stack pushed Start Call/FaceTime/Text/disposition
+     above the visible viewport until you scrolled up to find them. Pinning
+     to the top keeps all of those visible immediately; only the scripts
+     section below scrolls within its own bounded box (see
+     .start-call-overlay__scripts). */
+  align-items: flex-start;
   justify-content: center;
-  /* Between the who/button/secondary-actions/disposition/scripts, this can
-     run taller than a short laptop screen — scroll rather than clip. */
   overflow-y: auto;
   padding: 2rem 0;
 }
@@ -493,13 +497,19 @@ body {
 
 /* Read-aloud voicemail scripts (see shared/voicemailScripts.js) — a fixed
    max-width keeps lines from stretching edge-to-edge on a wide monitor,
-   which is hard to read at a glance mid-call. */
+   which is hard to read at a glance mid-call. Bounded height + its own
+   scrollbar rather than growing with the content: Start Call/FaceTime/
+   Text/disposition above this must stay on screen without scrolling even
+   when both scripts are long — only this section scrolls to reach them. */
 .start-call-overlay__scripts {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   width: min(42rem, 90vw);
+  max-height: 32vh;
+  overflow-y: auto;
   margin-top: 0.5rem;
+  padding-right: 0.25rem;
   text-align: left;
 }
 
