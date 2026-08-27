@@ -400,6 +400,21 @@ auto-started recording the instant you dialed, but that meant a call that had al
 for a minute before you picked up the phone from this app got its opening cut off in the
 recording — one manual click (now hard to miss) beats a silent auto-start.
 
+The prompt also carries everything you'd otherwise have to leave it to find:
+
+- **🎥 FaceTime / 💬 Text** buttons for the exact number you just dialed, in case the call doesn't
+  connect and you want to switch approach without going back to **Property**.
+- **Disposition buttons** (✅ Correct / ❌ Wrong number / 📵 No answer / 🚫 DNC / 💀 Dead) for that
+  same number — same call-outcome tag as the Property drawer's phone list (see [Multiple contacts,
+  multiple numbers](#multiple-contacts-multiple-numbers)), settable right here without opening it.
+  Only shown for a saved property; a Quick Call has no record to tag it against.
+- **Voicemail scripts** (`src/shared/voicemailScripts.js`) — word-for-word "1st Attempt" / "3rd
+  Attempt" scripts for when it goes to voicemail, with the contact's name and the deceased owner's
+  name filled in automatically from whatever property/contact is selected (falling back to the
+  same `[NAME]`/`[DECEASED]` bracket convention as the staged call scripts when nothing's on file).
+  A couple of things — a specific county, 1-2 identifying details connecting the contact to the
+  deceased — aren't on file for any property and stay bracketed for you to fill in out loud.
+
 **Ending is manual too — click End Call when you hang up.** An earlier version tried to
 auto-detect hangup from the tapped audio going quiet, but macOS doesn't expose real call-state to
 third-party apps, so that was a heuristic guess — and a real, long silence (a rep on hold, a long

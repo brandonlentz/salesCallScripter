@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PHONE_STATUSES } from './phoneStatuses.js'
 
 const BLANK_DRAFT = {
   label: '',
@@ -15,19 +16,6 @@ const BLANK_DRAFT = {
 
 const BLANK_CONTACT = { name: '', relationship: '', phones: [] }
 const BLANK_PHONE = { number: '', label: '', status: '' }
-
-// Call-outcome tag for a single number — set after a dial attempt so the
-// next rep to work this property (or you, next round) knows what happened
-// last time without re-reading notes. Purely informational, doesn't affect
-// dialing or the suggestion engine.
-const PHONE_STATUSES = [
-  { value: '', label: 'No status', icon: '' },
-  { value: 'correct', label: 'Correct', icon: '✅' },
-  { value: 'wrong', label: 'Wrong number', icon: '❌' },
-  { value: 'no-answer', label: 'No answer', icon: '📵' },
-  { value: 'dnc', label: 'DNC', icon: '🚫' },
-  { value: 'dead', label: 'Dead', icon: '💀' }
-]
 
 // Flattens every phone across every contact into one list, each entry
 // paired with which contact it belongs to — used anywhere we need "just
@@ -149,7 +137,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
   // nepqPrompt.js) — important since one property can have several
   // contacts, each with several numbers.
   function handleCall(property, contact, phoneNumber) {
-    onCall(property, contact)
+    onCall(property, contact, phoneNumber)
     window.api.dialer.call(phoneNumber)
   }
 
@@ -161,7 +149,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
   // native/audiotap/main.swift), but that's only confirmed for Phone calls
   // so far; worth trying it on a real FaceTime call.
   function handleFaceTime(property, contact, phoneNumber) {
-    onCall(property, contact)
+    onCall(property, contact, phoneNumber)
     window.api.dialer.facetime(phoneNumber)
   }
 
@@ -183,7 +171,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
     const name = quickName.trim()
     const contact = { name, relationship: '', phones: [{ number, label: '' }] }
     const property = { label: name || number, contacts: [contact] }
-    onCall(property, contact)
+    onCall(property, contact, number)
     if (action === 'call') window.api.dialer.call(number)
     else if (action === 'facetime') window.api.dialer.facetime(number)
     else window.api.dialer.text(number)

@@ -143,11 +143,40 @@ function App() {
   // exactly who's on the line — see buildPropertyContext in nepqPrompt.js —
   // rather than just the property in general, which matters once a
   // property has more than one contact or a contact has more than one
-  // number. Dialing itself is handled in PropertyPanel.
-  function handleCall(property, contact) {
-    setSelectedProperty(contact ? { ...property, activeContact: contact } : property)
+  // number. Dialing itself is handled in PropertyPanel. `phoneNumber` is
+  // kept as `dialedNumber` — separate from `activeContact`'s own phones
+  // list, since a contact can have several numbers and this is specifically
+  // the one just dialed — so the full-screen Start Call prompt knows which
+  // one to offer FaceTime/Text/disposition on (see LiveCallPanel.jsx).
+  function handleCall(property, contact, phoneNumber) {
+    setSelectedProperty(
+      contact ? { ...property, activeContact: contact, dialedNumber: phoneNumber } : property
+    )
     setPropertyOpen(false)
     setDialSignal((n) => n + 1)
+  }
+
+  // Sets the call-outcome tag (see phoneStatuses.js) on the number just
+  // dialed, from the full-screen Start Call prompt — mirrors
+  // PropertyPanel's own handlePhoneStatus, but matches by phone number
+  // instead of a contact/phone index since that's all LiveCallPanel has.
+  // Only meaningful for a saved property (has an id to persist against);
+  // a Quick Call's synthetic property has nothing to save it to.
+  async function handlePhoneStatus(status) {
+    if (!selectedProperty?.id || !selectedProperty?.dialedNumber) return
+    // activeContact/dialedNumber are UI-only additions from handleCall
+    // above, not part of the persisted property shape — strip them before
+    // sending to the store, then reattach them to the saved result.
+    const { activeContact, dialedNumber, ...persisted } = selectedProperty
+    const updatedContacts = persisted.contacts.map((c) => ({
+      ...c,
+      phones: (c.phones ?? []).map((p) => (p.number === dialedNumber ? { ...p, status } : p))
+    }))
+    const saved = await window.api.properties.update(selectedProperty.id, {
+      ...persisted,
+      contacts: updatedContacts
+    })
+    setSelectedProperty({ ...saved, activeContact, dialedNumber })
   }
 
   // Manual override for when you hit Start Call mid-conversation (already
@@ -285,6 +314,7 @@ function App() {
         callType={callType}
         property={selectedProperty}
         dialSignal={dialSignal}
+        onPhoneStatus={handlePhoneStatus}
       />
 
       <PropertyPanel

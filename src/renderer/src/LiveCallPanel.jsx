@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import CallSummaryModal from './CallSummaryModal'
+import { PHONE_STATUSES } from './phoneStatuses.js'
+import { VOICEMAIL_SCRIPTS, fillVoicemailScript } from '../../shared/voicemailScripts.js'
 
 // Deepgram only marks a channel entry final at a genuine pause, so there's
 // little upside in waiting long after that to ask for suggestions — every
@@ -34,7 +36,14 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 300
 // hangup from a volume heuristic in liveCall.js — the latter risked ending
 // a call early during a real, long silence (a rep on hold, a long thinking
 // pause), worse than requiring one click each way.
-export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callType, property, dialSignal }) {
+export default function LiveCallPanel({
+  onTranscriptChange,
+  onSuggestions,
+  callType,
+  property,
+  dialSignal,
+  onPhoneStatus
+}) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error
   const [error, setError] = useState('')
   const [entries, setEntries] = useState([])
@@ -236,6 +245,17 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
   // context at all).
   const callingWho = property?.activeContact?.name || property?.label || ''
 
+  // Disposition control (see phoneStatuses.js) only makes sense for a
+  // saved property — there's an id to persist the status against, and a
+  // specific dialed number to tag. A Quick Call's synthetic property has
+  // neither, so no control renders for it (same guard PropertyPanel uses).
+  const canDispositionCall = Boolean(property?.id && property?.dialedNumber)
+  const dialedPhoneStatus = canDispositionCall
+    ? (property.contacts ?? [])
+        .flatMap((c) => c.phones ?? [])
+        .find((p) => p.number === property.dialedNumber)?.status ?? ''
+    : ''
+
   return (
     <>
       {showStartPrompt && (
@@ -259,6 +279,41 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
             >
               {status === 'connecting' ? 'Connecting…' : 'Start Call'}
             </button>
+
+            {property?.dialedNumber && (
+              <div className="start-call-overlay__secondary-actions">
+                <button
+                  type="button"
+                  onClick={() => window.api.dialer.facetime(property.dialedNumber)}
+                >
+                  🎥 FaceTime
+                </button>
+                <button type="button" onClick={() => window.api.dialer.text(property.dialedNumber)}>
+                  💬 Text
+                </button>
+              </div>
+            )}
+
+            {canDispositionCall && (
+              <div className="start-call-overlay__disposition">
+                <span className="start-call-overlay__disposition-label">
+                  This number ({property.dialedNumber}):
+                </span>
+                <div className="phone-status-row">
+                  {PHONE_STATUSES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      className={`phone-status-row__item${dialedPhoneStatus === s.value ? ' is-active' : ''}`}
+                      onClick={() => onPhoneStatus?.(s.value)}
+                    >
+                      {s.icon ? `${s.icon} ${s.label}` : s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               className="start-call-overlay__dismiss"
@@ -266,6 +321,20 @@ export default function LiveCallPanel({ onTranscriptChange, onSuggestions, callT
             >
               Not now
             </button>
+
+            <div className="start-call-overlay__scripts">
+              {VOICEMAIL_SCRIPTS.map((script) => (
+                <div key={script.id} className="voicemail-script">
+                  <p className="voicemail-script__label">{script.label}</p>
+                  <pre className="voicemail-script__text">
+                    {fillVoicemailScript(script.template, {
+                      contactName: property?.activeContact?.name,
+                      deceasedName: property?.deceasedName
+                    })}
+                  </pre>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
