@@ -77,7 +77,11 @@ export async function analyzeCall(transcriptText, callType) {
 
   const message = await anthropic.messages.create({
     model: 'claude-opus-5',
-    max_tokens: 2000,
+    // Headroom above what a score + summary + three 2-5 bullet lists should
+    // need — 2000 was cutting it close in practice (real calls tripped the
+    // max_tokens backstop below), especially with NEPQ reference notes
+    // pushing the model toward longer, more specific critiques.
+    max_tokens: 4096,
     system: buildSystemPrompt(callType, referenceContent),
     output_config: { format: { type: 'json_schema', schema: ANALYSIS_SCHEMA } },
     messages: [{ role: 'user', content: `Call transcript:\n\n${transcriptText}` }]

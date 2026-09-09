@@ -14,8 +14,8 @@ const INTRO_SCRIPT = [
     lines: [
       `"Hi, I'm not sure I have the right number — is this [NAME]?" [PAUSE]`,
       `"Oh that's great… I've been trying to get a hold of you."`,
-      `"My name is Brandon… [last name]. You don't know me, and I'm not even sure it makes sense to talk, but I work for a private detective firm in Washington D.C…. [playful] and you are not in trouble or anything…" [PAUSE]`,
-      `"We were hired by a client in Texas to research and make contact with the family of the late [DECEASED] who… [2–3 family/history details]."`,
+      `"My name is Brandon… [last name]. You don't know me, and I'm not even sure it makes sense to talk, but I work for a company that acquires inherited property." [PAUSE]`,
+      `"We're looking to make contact with the family of the late [DECEASED] who… [2–3 family/history details — when they were married, when they passed away, distinguishing details, etc.]."`,
       `IF HEIR: "Based on our research, I believe you might be related to the late [DECEASED], who I believe was your [grandma/grandfather/etc.]."`,
       `IF NON-HEIR: "The reason I'm calling is I'm trying to get a hold of [heir name] who I think might be your [friend/sister/relative]."`,
       `"I want to take a pause and make sure — do I have the wrong person?" [Confirm relationship. Let them talk.]`
@@ -93,7 +93,7 @@ const INTRO_SCRIPT = [
     stage: 'objection',
     title: 'Objections',
     lines: [
-      `SCAM / WHO ARE YOU: "Totally fair — I work for Privates ID, a PI firm in D.C. I can text you our info at the end. Would it be a problem to speak for 2 minutes?"`,
+      `SCAM / WHO ARE YOU: "Totally fair — I work for a company that acquires inherited property. I can text you our info at the end. Would it be a problem to speak for 2 minutes?"`,
       `NOT INTERESTED: "Totally fair — before I let you go, can I ask what makes you say that?" [PAUSE. Let them answer — "not interested" this early is often really "I don't understand yet."] [MIRROR their reason back as a question, then keep listening.]`,
       `TAKING CARE OF IT: [MIRROR] "Taking care of it?" [curious tone] "How did it get to this point?"`,
       `WHAT IS THIS ABOUT: "A tax foreclosure lawsuit was filed. We wanted to see if family was aware, planned to take care of it, or might consider other options."`,
@@ -189,7 +189,7 @@ const ASSOCIATE_SCRIPT = [
     stage: 'credibility',
     title: 'Build Credibility',
     lines: [
-      `"We're Privates ID, a PI firm in D.C., working for a Texas real estate company. We found [Heir]'s info through court records related to the property."`,
+      `"We're a company that acquires inherited property. We found [Heir]'s info through public records related to the property."`,
       `Less is more — over-explaining raises suspicion.`
     ]
   },
