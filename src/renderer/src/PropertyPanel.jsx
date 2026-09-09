@@ -334,7 +334,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
                       onClick={() => handleQuickCall('facetime')}
                       disabled={!quickNumber.trim()}
                     >
-                      🎥 FaceTime
+                      🔊 FaceTime
                     </button>
                     <button type="button" onClick={() => handleQuickCall('text')} disabled={!quickNumber.trim()}>
                       💬 Text
@@ -386,7 +386,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
                                       title={`FaceTime ${label}`}
                                       aria-label={`FaceTime ${label}`}
                                     >
-                                      🎥
+                                      🔊
                                     </button>
                                     <button
                                       type="button"

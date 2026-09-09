@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import CallSummaryModal from './CallSummaryModal'
 import { PHONE_STATUSES } from './phoneStatuses.js'
-import { VOICEMAIL_SCRIPTS, SMS_SCRIPTS, fillScript } from '../../shared/outreachScripts.js'
+import { VOICEMAIL_SCRIPTS, SMS_SCRIPTS, nextSmsVariant, fillScript } from '../../shared/outreachScripts.js'
+
+// One rotated variant per SMS slot (see outreachScripts.js's nextSmsVariant)
+// — computed fresh each time this is called, not read inline in render,
+// since picking advances the rotation's position in localStorage.
+function pickSmsVariants() {
+  return Object.fromEntries(SMS_SCRIPTS.map((script) => [script.id, nextSmsVariant(script.id)]))
+}
 
 // Deepgram only marks a channel entry final at a genuine pause, so there's
 // little upside in waiting long after that to ask for suggestions — every
@@ -77,6 +84,10 @@ export default function LiveCallPanel({
   // start it manually needs to be impossible to miss, not buried in a
   // panel that may be scrolled out of view.
   const [showStartPrompt, setShowStartPrompt] = useState(false)
+  // This attempt's SMS wording (see outreachScripts.js) — one rotated
+  // variant per slot, re-picked each time a new dial goes out (the
+  // dialSignal effect below), not on every render.
+  const [smsVariants, setSmsVariants] = useState(pickSmsVariants)
   // Which outreach script (see outreachScripts.js) most recently got
   // copied — drives a transient "Copied!" label on that one Copy button.
   // Keyed by script id rather than a plain boolean so copying one script
@@ -125,7 +136,10 @@ export default function LiveCallPanel({
   useEffect(() => {
     if (dialSignal === undefined || dialSignal === dialSignalRef.current) return
     dialSignalRef.current = dialSignal
-    if (statusRef.current === 'idle') setShowStartPrompt(true)
+    if (statusRef.current === 'idle') {
+      setShowStartPrompt(true)
+      setSmsVariants(pickSmsVariants())
+    }
     // Only dialSignal should retrigger this — status is read via the ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialSignal])
@@ -327,7 +341,11 @@ export default function LiveCallPanel({
   // filled in from whatever property/contact is currently selected, with a
   // Copy button for pasting straight into Messages.app after tapping Text.
   function renderScriptCard(script) {
-    const filled = fillScript(script.template, {
+    // Voicemail scripts have a single fixed `template`; SMS scripts rotate
+    // through several `variants` (see outreachScripts.js) — smsVariants
+    // holds this attempt's pick for each.
+    const template = script.variants ? smsVariants[script.id] : script.template
+    const filled = fillScript(template, {
       contactName: property?.activeContact?.name,
       deceasedName: property?.deceasedName
     })
@@ -378,7 +396,7 @@ export default function LiveCallPanel({
                   type="button"
                   onClick={() => window.api.dialer.facetime(property.dialedNumber)}
                 >
-                  🎥 FaceTime
+                  🔊 FaceTime
                 </button>
                 <button type="button" onClick={() => window.api.dialer.text(property.dialedNumber)}>
                   💬 Text
