@@ -1,6 +1,13 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'node:path'
-import { config as loadEnv } from 'dotenv'
+import { readFileSync } from 'node:fs'
+import { config as loadEnv, parse as parseEnv } from 'dotenv'
+import {
+  loadStoredConfig,
+  saveStoredConfig,
+  applyConfigToEnv,
+  missingRequiredKeys
+} from './secureConfig.js'
 import { listTranscripts, loadTranscript } from './trainingTranscripts.js'
 import { getSuggestions } from './suggestions.js'
 import { registerLiveCallHandlers } from './liveCall.js'
@@ -19,6 +26,7 @@ import { parseNepqReference } from './parseNepqReference.js'
 import { analyzeCall } from './callAnalysis.js'
 import { initUsageTracker, getUsageSnapshot } from './usageTracker.js'
 import { startReisiftWebhookSocket } from './reisiftWebhookSocket.js'
+import { configureReisiftOutbound } from './reisiftOutbound.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
@@ -90,7 +98,8 @@ function registerIpcHandlers() {
   ipcMain.handle('properties:parse', (_event, rawText) => parsePropertyText(rawText))
   // Hands off to the matching macOS URL handler — tel: (Phone app /
   // Continuity Dialer, the same app the whole live-call setup already
-  // routes audio through), facetime: (FaceTime.app, video), or sms:
+  // routes audio through), facetime-audio: (FaceTime.app, audio-only —
+  // deliberately not facetime:, which opens as video), or sms:
   // (Messages.app). We're not placing the call/composing the text
   // ourselves, just triggering the OS app to. FaceTime is likely captured
   // by the same native-tap target as Phone calls (both are believed to run
@@ -105,18 +114,79 @@ function registerIpcHandlers() {
     shell.openExternal(`tel:${digitsOnly(phoneNumber)}`)
   })
   ipcMain.handle('dialer:facetime', (_event, phoneNumber) => {
-    shell.openExternal(`facetime:${digitsOnly(phoneNumber)}`)
+    shell.openExternal(`facetime-audio:${digitsOnly(phoneNumber)}`)
   })
   ipcMain.handle('dialer:text', (_event, phoneNumber) => {
     shell.openExternal(`sms:${digitsOnly(phoneNumber)}`)
   })
   ipcMain.handle('usage:get', () => getUsageSnapshot())
   registerLiveCallHandlers(() => mainWindow, appRootDir)
+
+  // First-run Setup screen (src/renderer/src/SetupScreen.jsx) — gates the
+  // main app on the two required keys being present, and lets a teammate
+  // paste them in directly or import an existing .env file instead.
+  ipcMain.handle('config:get-status', () => ({ missing: missingRequiredKeys() }))
+
+  ipcMain.handle('config:save', (_event, values) => {
+    const updates = {}
+    if (values.anthropicApiKey) updates.ANTHROPIC_API_KEY = values.anthropicApiKey.trim()
+    if (values.deepgramApiKey) updates.DEEPGRAM_API_KEY = values.deepgramApiKey.trim()
+    if (values.reisiftWebhookUrl) updates.REISIFT_WEBHOOK_SITE_URL = values.reisiftWebhookUrl.trim()
+    if (values.webhookSiteApiKey) updates.WEBHOOK_SITE_API_KEY = values.webhookSiteApiKey.trim()
+    if (values.zapierStatusWebhookUrl) {
+      updates.REISIFT_ZAPIER_STATUS_WEBHOOK_URL = values.zapierStatusWebhookUrl.trim()
+    }
+    if (values.zapierNewPhoneWebhookUrl) {
+      updates.REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL = values.zapierNewPhoneWebhookUrl.trim()
+    }
+    if (values.zapierNewContactWebhookUrl) {
+      updates.REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL = values.zapierNewContactWebhookUrl.trim()
+    }
+    saveStoredConfig(updates)
+    // Simplest way to guarantee every module that reads these (the
+    // Anthropic/Deepgram clients, the REISift socket) picks up the new
+    // values is a clean restart, rather than trying to invalidate half a
+    // dozen already-constructed clients in place.
+    app.relaunch()
+    app.exit(0)
+  })
+
+  ipcMain.handle('config:import-env-file', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import .env file',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Env file', extensions: ['env'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (canceled || !filePaths[0]) return null
+
+    const parsed = parseEnv(readFileSync(filePaths[0]))
+    return {
+      anthropicApiKey: parsed.ANTHROPIC_API_KEY || '',
+      deepgramApiKey: parsed.DEEPGRAM_API_KEY || '',
+      reisiftWebhookUrl: parsed.REISIFT_WEBHOOK_SITE_URL || '',
+      webhookSiteApiKey: parsed.WEBHOOK_SITE_API_KEY || '',
+      zapierStatusWebhookUrl: parsed.REISIFT_ZAPIER_STATUS_WEBHOOK_URL || '',
+      zapierNewPhoneWebhookUrl: parsed.REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL || '',
+      zapierNewContactWebhookUrl: parsed.REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL || ''
+    }
+  })
 }
 
 let reisiftWebhookSocket = null
 
 app.whenReady().then(() => {
+  // Packaged installs (see the README's "For your team" section) have no
+  // .env file to load — the Setup screen collects keys on first run instead
+  // and they're persisted encrypted via secureConfig.js, which relies on
+  // Electron's safeStorage — unusable until this `ready` callback, so this
+  // can't run at module load time like the dev .env load above. A dev .env
+  // always takes priority over a stored value (applyConfigToEnv only fills
+  // in gaps), so this doesn't change the normal `npm run dev` workflow.
+  applyConfigToEnv(loadStoredConfig())
+
   initUsageTracker(() => mainWindow)
   registerIpcHandlers()
   createWindow()
@@ -127,6 +197,17 @@ app.whenReady().then(() => {
   // connection indicator — see reisiftWebhookSocket.js.
   reisiftWebhookSocket = startReisiftWebhookSocket(process.env.REISIFT_WEBHOOK_SITE_URL, {
     onSynced: (result) => mainWindow?.webContents.send('properties:synced', result.property),
+    onStatus: (message) => mainWindow?.webContents.send('reisift:status', message)
+  })
+
+  // Outbound direction — pushes dispositions/new numbers/new contacts back
+  // to REISift via Zapier (see reisiftOutbound.js and properties.js's
+  // detectOutboundChanges). Reuses the same 'reisift:status' line above for
+  // push confirmations/failures rather than adding new UI.
+  configureReisiftOutbound({
+    statusWebhookUrl: process.env.REISIFT_ZAPIER_STATUS_WEBHOOK_URL,
+    newPhoneWebhookUrl: process.env.REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL,
+    newContactWebhookUrl: process.env.REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL,
     onStatus: (message) => mainWindow?.webContents.send('reisift:status', message)
   })
 

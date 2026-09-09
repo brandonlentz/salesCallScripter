@@ -83,14 +83,60 @@ uploaded reference material (e.g. Jeremy Miner NEPQ training PDFs).
 - **Swift / Core Audio** ([native/audiotap](native/audiotap)) — native macOS process-tap helper
   for caller-audio capture without a virtual audio device (see [Live Call](#live-call) below)
 
-## Getting Started
+## Team Install (recommended — no Terminal, no Xcode)
 
-There's no downloadable installer (no `.dmg`/`.app` release) — this runs from a checkout of the
-repo via a couple of `npm` commands. It's a few one-time steps, but nothing beyond copy-paste.
+This is the path for everyone on the team who isn't touching the code. It gets you a normal
+double-clickable app. Requires **macOS 15+ (Sequoia or later)** — the native audio-capture helper
+won't run on older macOS.
+
+1. Go to the repo's **[Releases page](https://github.com/brandonlentz/salesCallScripter/releases)**
+   and download the newest `Sales.Call.Scripter-*.dmg`.
+2. Open the `.dmg` and drag **Sales Call Scripter** into **Applications**.
+3. **First launch only:** because this app isn't signed by an Apple Developer account
+   (a deliberate cost/simplicity tradeoff), macOS Gatekeeper blocks a plain double-click the first
+   time with an "Apple could not verify..." message. Instead, **right-click (or Control-click)
+   the app in Applications → Open**, then click **Open** again in the dialog that pops up. Every
+   launch after that is a normal double-click.
+4. **First launch also shows a one-time Setup screen** asking for:
+   - Your **Anthropic API key** ([get one](https://console.anthropic.com/settings/keys))
+   - Your **Deepgram API key** ([get one](https://console.deepgram.com/))
+   - Optionally, a **REISift webhook URL** (see [Wiring up the live sync](#wiring-up-the-live-sync)
+     below) — can be added later
+   
+   Paste the values in directly, or click **Import from a .env file...** to pick an existing
+   `.env` (e.g. one a teammate sent you) and prefill the form from it. Keys are encrypted and
+   saved on that Mac only (via the macOS Keychain) — you won't see this screen again after
+   clicking **Save & Launch**, which restarts the app once to apply them.
+5. macOS will separately ask to approve **microphone access** (first dial) and **audio capture**
+   under **System Settings → Privacy & Security → Screen & System Audio Recording** (first live
+   call) — allow both. No Xcode Command Line Tools needed for this path; the native audio-capture
+   helper ships prebuilt inside the app.
+
+**Updating later:** repeat steps 1-3 with the newer `.dmg` (replacing the old app in Applications).
+Your saved keys aren't touched by that — they live outside the app bundle — so Setup won't show
+again.
+
+**For the maintainer — cutting a new release:** push a version tag and GitHub Actions builds and
+publishes the `.dmg` automatically (see `.github/workflows/release.yml`):
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+No local build or Xcode needed for this either — the workflow runs on a GitHub-hosted macOS
+runner. Check the repo's **Actions** tab if a release doesn't show up within a few minutes.
+
+## Getting Started (development)
+
+This is the path for working on the code itself — running from a checkout of the repo instead of
+the packaged app above.
 
 ### Prerequisites
 
-- **macOS 14.4+** (Sonoma or later), with calls placed through the built-in **Phone app**
+- **macOS 15+** (Sequoia or later) — the native audio-capture helper's Core Audio process-tap
+  APIs (`AudioHardwareTap` etc.) don't exist before Sequoia; `native/audiotap/build.sh` targets
+  15.0 explicitly for this reason. Calls are placed through the built-in **Phone app**
   (Continuity Calling from an iPhone signed into the same Apple ID and nearby) so the call audio
   plays through the Mac. Check your version: **Apple menu → About This Mac**.
 - **Node.js 18+** and npm (comes with Node) — get it at https://nodejs.org (the LTS installer) if
@@ -187,9 +233,20 @@ transcripts, audio recordings, and your API keys stay on your machine only, neve
 ### Building a standalone bundle (advanced, optional)
 
 `npm run build` produces a production bundle in `out/`, run with `npm run preview` — same app,
-without the dev server/hot-reload. This is **not** a distributable double-click `.app` (no
-packaging/code-signing is set up for that yet) — for day-to-day use, `npm run dev` is the normal
-path.
+without the dev server/hot-reload.
+
+To build the actual distributable `.dmg` (what [Team Install](#team-install-recommended--no-terminal-no-xcode)
+above uses — this is what CI runs on tag push, and normally you'd just push a tag instead of doing
+this locally):
+
+```bash
+npm run build:audiotap   # bundles the helper into the app as a resource — see package.json's
+                          # build.extraResources
+npm run package:mac
+```
+
+Output lands in `dist/*.dmg`. It's **unsigned** (no Apple Developer account is used), so it needs
+the right-click-to-open step described in Team Install on every Mac it's installed on.
 
 ## Using the app
 
@@ -283,6 +340,76 @@ created once and updated in place on every later webhook, no duplicates:
   compliance signal, not a coaching note.
 - Nothing is ever deleted by a sync — a contact or number missing from one payload isn't treated
   as proof they're gone, only new/changed data is applied.
+
+### Pushing dispositions and new contacts back to REISift
+
+The sync above is one-directional (REISift → this app). This section is the other direction:
+setting a call disposition, adding a number to someone REISift already tracks, or adding a
+brand-new contact — all get pushed back out to REISift automatically, so there's no separate step
+in REISift's own UI. Three independent events, each optional (leave its webhook URL blank to
+disable just that one):
+
+| Event | Fires when... | REISift action to use |
+| --- | --- | --- |
+| `phone_status_updated` | You set a phone's call-outcome status (✅/❌/📵/🚫/💀) on a contact REISift already tracks | **Add Phone Status to Phones** — REISift's own default statuses are literally Correct/Wrong/No Answer/DNC/Dead, a direct match |
+| `phone_number_added` | A new number appears on a contact REISift already tracks | Whichever REISift action adds a phone to an existing owner (REISift doesn't have one dedicated to just this — `Create/Update Property` is the closest) |
+| `contact_added` | A brand-new person (no REISift record at all) is added to a property REISift already tracks | **Create Owner** |
+
+All three only ever fire for a **property REISift already knows about** (has a `reisiftUuid` from
+a prior inbound sync) — there's no REISift record to attach anything to otherwise. A phone-status
+change or new number on a contact REISift tracks also requires that *contact* to have its own
+REISift identity (`reisiftUuid`); a brand-new contact obviously doesn't, which is exactly what
+`contact_added` is for.
+
+**Sent in real time, one item per push** — this app doesn't batch or schedule anything itself.
+If you want changes to land in REISift on an hourly cadence rather than instantly, build that on
+the Zapier side (e.g. a **Digest by Zapier** step collecting pushes and releasing them on a
+schedule, or a **Schedule by Zapier**-triggered Zap) rather than this app queuing anything —
+that's simpler than duplicating scheduling logic in both places, and Zapier already has
+purpose-built tools for it.
+
+**Setup — one Zap per event, since REISift doesn't publish a general write API:**
+
+1. In Zapier, create a Zap starting with **Webhooks by Zapier → Catch Hook** as the trigger. Copy
+   the Catch Hook URL it gives you.
+2. Paste that URL into `.env` (or the Setup screen) as the matching variable —
+   `REISIFT_ZAPIER_STATUS_WEBHOOK_URL`, `REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL`, or
+   `REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL` — and restart the app.
+3. Trigger one real event in the app (set a phone's status, add a number, or add a contact,
+   matching whichever Zap you're building), then in Zapier click **Test trigger** to pull in that
+   sample payload.
+4. Add REISift's action from the table above as the next step, and map its fields from the
+   trigger's payload (payload field names are listed below to help with that — the exact input
+   fields REISift's action exposes aren't published anywhere outside Zapier's own action-config
+   screen, so map by matching names to what's on screen).
+5. Test the action step once (this really updates REISift), confirm it in REISift's UI, then turn
+   the Zap on.
+6. Repeat steps 1–5 for however many of the three events you want live — they're independent Zaps.
+
+**Payload fields sent to each webhook** (JSON body, `POST`, one flat object per push):
+
+- `phone_status_updated` / `phone_number_added`: `reisiftPropertyUuid`, `reisiftOwnerUuid`,
+  `contactName`, `propertyLabel`, `phoneNumber`, `phoneLabel`, `status` (status event only —
+  already translated to REISift's own enum: `UNKNOWN`/`CORRECT`/`WRONG`/`NO_ANSWER`/`DEAD`/`DNC`,
+  confirmed against the actual field picker in REISift's "Add Phone Status to Phones" action —
+  see `REISIFT_STATUS_BY_LOCAL_STATUS` in `reisiftOutbound.js`), `timestamp`.
+- `contact_added`: `reisiftPropertyUuid`, `contactName`, `relationship`, `propertyLabel`,
+  `phones` (array of `{ number, label }`), `timestamp`.
+
+**Same eventual-consistency tolerance as the inbound side** — a push failure (Zap down, REISift
+rejecting the payload, network hiccup) never blocks or fails the local save; it's logged to the
+console and reported through the same `🔄` status line the inbound sync already uses in the
+Property drawer, prefixed `→ REISift:` so you can tell the two directions apart. A failed push
+isn't retried automatically — the change stays correct locally, just not reflected in REISift
+until the next time that phone/contact is touched (or you retrigger it by hand).
+
+**Known limitation — a brief duplicate window on new contacts.** After a `contact_added` push,
+REISift creates the owner and (if a webhook/sequence is wired for it) syncs it back with a new
+`owner.uuid`. The inbound merge tries to attach that uuid to the matching local-only contact
+(matched by name + a shared phone number) rather than creating a second copy, but if REISift takes
+a while to sync back, or the name/number don't match closely enough, you may briefly see two
+entries for the same person until that sync lands — safe to just delete the older local-only one
+once it does.
 
 ### Manual entry still works
 
