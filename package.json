@@ -6,12 +6,14 @@
   "author": "Brandon Lentz",
   "private": true,
   "type": "module",
+  "repository": "github:brandonlentz/salesCallScripter",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
-    "build:audiotap": "native/audiotap/build.sh"
+    "build:audiotap": "native/audiotap/build.sh",
+    "package:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
@@ -24,7 +26,39 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
     "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "vite": "^7.3.6"
+  },
+  "build": {
+    "appId": "com.salescallscripter.app",
+    "productName": "Sales Call Scripter",
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "native/audiotap/build/audiotap",
+        "to": "audiotap"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "identity": null,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "brandonlentz",
+      "repo": "salesCallScripter",
+      "releaseType": "release"
+    }
   }
 }

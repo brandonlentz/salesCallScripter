@@ -1274,3 +1274,108 @@ body {
   color: #9a9fa6;
   font-size: 0.75rem;
 }
+
+.setup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 1.5rem;
+}
+
+.setup__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  background: #1b1e24;
+  border: 1px solid #2a2e35;
+  border-radius: 12px;
+  padding: 1.75rem;
+}
+
+.setup__card h1 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.setup__intro {
+  margin: 0;
+  color: #9a9fa6;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.setup__import {
+  background: #22262d;
+  color: #f2f2f2;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.setup__section-label {
+  margin: 0.4rem 0 -0.3rem;
+  color: #9a9fa6;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-top: 1px solid #2a2e35;
+  padding-top: 0.9rem;
+}
+
+.setup__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: #d5d8dc;
+}
+
+.setup__field em {
+  color: #9a9fa6;
+  font-style: normal;
+}
+
+.setup__field input {
+  background: #14161a;
+  color: #f2f2f2;
+  border: 1px solid #33373f;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+.setup__field a {
+  align-self: flex-start;
+  color: #6ea8fe;
+  font-size: 0.75rem;
+}
+
+.setup__error {
+  margin: 0;
+  color: #f2a0a0;
+  font-size: 0.8rem;
+}
+
+.setup__save {
+  background: #3a6df0;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.setup__save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

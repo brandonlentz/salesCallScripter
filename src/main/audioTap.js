@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 
@@ -14,6 +15,11 @@ import { join } from 'node:path'
 export const AUDIO_TAP_SAMPLE_RATE = 16000
 
 function helperPath(appRootDir) {
+  // Packaged installs ship the compiled helper as an extraResource (see the
+  // `build.extraResources` config in package.json) so teammates don't need
+  // Xcode Command Line Tools — only a dev checkout builds it locally via
+  // `npm run build:audiotap`.
+  if (app.isPackaged) return join(process.resourcesPath, 'audiotap')
   return join(appRootDir, 'native', 'audiotap', 'build', 'audiotap')
 }
 

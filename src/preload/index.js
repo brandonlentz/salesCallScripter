@@ -81,6 +81,13 @@ const api = {
       return () => ipcRenderer.removeListener('live-call:audiotap-status', listener)
     }
   },
+  config: {
+    // First-run Setup screen (SetupScreen.jsx) — see config:* handlers in
+    // src/main/index.js.
+    getStatus: () => ipcRenderer.invoke('config:get-status'),
+    save: (values) => ipcRenderer.invoke('config:save', values),
+    importEnvFile: () => ipcRenderer.invoke('config:import-env-file')
+  },
   usage: {
     // One-shot pull of everything recorded so far — for seeding UI state on
     // mount, since the live push below only reaches a window that's already
