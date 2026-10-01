@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { connectDeepgram } from './deepgram.js'
 import { startRecording } from './recording.js'
 import { startAudioTapCapture, AUDIO_TAP_SAMPLE_RATE } from './audioTap.js'
+import { getTodayCallMetrics } from './dailyMetrics.js'
 
 // The 'prospect' channel's format when it comes from the native audiotap
 // helper instead of a browser MediaRecorder stream — headerless raw PCM,
@@ -185,6 +186,10 @@ export function registerLiveCallHandlers(getMainWindow, appRootDir) {
         `Recording saved, but merging into one file failed: ${mergeError}`
       )
     }
+    // meta.json (dialsMade/callsAnswered's source of truth) was just
+    // written by finish() above — push the refreshed today's totals so an
+    // open CallMetrics badge updates without the rep having to do anything.
+    getMainWindow()?.webContents.send('metrics:update', await getTodayCallMetrics(appRootDir))
     return { dir, mergeError }
   })
 }

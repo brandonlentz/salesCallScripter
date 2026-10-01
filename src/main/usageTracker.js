@@ -1,10 +1,17 @@
+import { app } from 'electron'
+import { appendFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 // Tracks Claude API token usage/cost across every call site in this app
 // (suggestions.js on the live-call critical path, plus the one-off
 // callAnalysis/parseProperty/parseScriptVariant/parseNepqReference calls)
 // so the rep can watch spend accumulate in real time instead of only
-// finding out from the Anthropic console after the fact. Session-only —
-// resets on app restart, deliberately: this is a live cost gauge, not a
-// billing ledger (see console.anthropic.com/settings/billing for that).
+// finding out from the Anthropic console after the fact. The in-memory
+// `totals`/`events` below are session-only (reset on app restart) — that's
+// deliberate for the live gauge (UsageMeter.jsx), but every event is ALSO
+// appended to a durable on-disk log (see logUsageEvent below) so
+// costReport.js can answer "what did this cost last week", not just "since
+// I opened the app".
 //
 // Pricing is USD per 1M tokens, snapshotted from Anthropic's published
 // rates at the models this app actually calls. Update here if pricing
@@ -92,6 +99,23 @@ export function recordUsage({ source, model, usage }) {
   events.length = Math.min(events.length, MAX_EVENTS)
 
   getMainWindow?.()?.webContents.send('usage:update', { event, totals: { ...totals } })
+  logUsageEvent(event)
+}
+
+// Durable append-only log (JSON Lines — one event per line, cheap to append
+// without reading/rewriting the whole file) that costReport.js reads back
+// to answer "what did this cost over date range X" — the in-memory
+// totals/events above can't, since they reset every restart. Fire-and-
+// forget: this must never add latency to recordUsage's callers, several of
+// which (suggestions.js) are on the live-call critical path.
+function usageLogPath() {
+  return join(app.getPath('userData'), 'usageLog.jsonl')
+}
+
+function logUsageEvent(event) {
+  appendFile(usageLogPath(), JSON.stringify(event) + '\n', 'utf-8').catch((err) => {
+    console.error('[usage-tracker] failed to append usage log:', err.message)
+  })
 }
 
 // Seeds the renderer's state on mount — the push above only reaches a

@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
@@ -183,4 +183,16 @@ export async function startRecording(appRootDir, { callType, channels, property,
       return { dir, mergeError }
     }
   }
+}
+
+// Sets the offer outcome ('offer-made' | 'offer-declined') on a finished
+// call's meta.json, so the Cost Report (see costReport.js/dailyMetrics.js)
+// can count Offer Made/Offer Declined — captured from CallSummaryModal.jsx
+// right after an "offer" call ends, since that's the first moment the rep
+// is looking at this specific call rather than dialing the next one.
+export async function setOfferOutcome(dir, outcome) {
+  const metaPath = join(dir, 'meta.json')
+  const meta = JSON.parse(await readFile(metaPath, 'utf-8'))
+  meta.offerOutcome = outcome
+  await writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
 }

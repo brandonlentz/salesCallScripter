@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { createAnthropicClient } from './anthropicClient.js'
 import { buildSystemPrompt, buildPropertyContext } from './nepqPrompt.js'
 import { CALL_TYPES, CALL_SCRIPTS, getStageIds } from '../shared/callScripts.js'
 import { getVariant } from './scriptVariants.js'
@@ -14,7 +14,7 @@ function getClient() {
     return null
   }
   if (!client) {
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    client = createAnthropicClient()
   }
   return client
 }

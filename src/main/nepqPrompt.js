@@ -51,6 +51,16 @@ much as the live conversation requires (e.g. filling in [PLACEHOLDER]s from cont
 a line that's already been covered). Prefer quoting the script closely over inventing new \
 phrasing. Where the script calls for silence or a pause, say so explicitly in the suggestion.
 
+OBJECTIONS: When the prospect raises an objection or pushes back, check the script's \
+Objections section for a line that genuinely addresses what they said. If it's a confident \
+match, use it. If none of the script's objection lines confidently fit — a new or unusual \
+objection the script doesn't cover — do not invent a rebuttal or force a low-confidence guess. \
+Instead, tell the rep to mirror it: repeat the prospect's own key words back as a short, \
+curious question, quoting their actual words from the transcript, e.g. {"type": "question", \
+"text": "Mirror it back: \\"...their words...?\\""}. This is the standard NEPQ move for drawing \
+out more before responding, and it's always safer than guessing at a canned response that \
+doesn't fit.
+
 SCRIPT:
 
 ${formatScript(sections)}

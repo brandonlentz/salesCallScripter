@@ -56,7 +56,11 @@ const api = {
       ipcRenderer.invoke('callAnalysis:analyze', { transcriptText, callType })
   },
   recordings: {
-    reveal: (dir) => ipcRenderer.invoke('recordings:reveal', dir)
+    reveal: (dir) => ipcRenderer.invoke('recordings:reveal', dir),
+    // Offer Made / Offer Declined, set from CallSummaryModal.jsx right after
+    // an "offer" call ends — see recording.js's setOfferOutcome.
+    setOfferOutcome: (dir, outcome) =>
+      ipcRenderer.invoke('recordings:set-offer-outcome', { dir, outcome })
   },
   liveCall: {
     start: (channels, meta) => ipcRenderer.invoke('live-call:start', { channels, ...meta }),
@@ -100,6 +104,30 @@ const api = {
       ipcRenderer.on('usage:update', listener)
       return () => ipcRenderer.removeListener('usage:update', listener)
     }
+  },
+  metrics: {
+    // Today's Dials Made / Calls Answered — see dailyMetrics.js. One-shot
+    // pull for seeding UI state on mount, since the live push below only
+    // reaches a window that's already listening.
+    getToday: () => ipcRenderer.invoke('metrics:get-today'),
+    // Fires after every call ends (see liveCall.js's live-call:stop) with
+    // the freshly-recomputed totals for today.
+    onUpdate: (callback) => {
+      const listener = (_event, metrics) => callback(metrics)
+      ipcRenderer.on('metrics:update', listener)
+      return () => ipcRenderer.removeListener('metrics:update', listener)
+    }
+  },
+  costReport: {
+    // AI usage cost (suggestions/call-analysis/other), Zap fire count, and
+    // call-activity totals (dials, answered, conversations, offers) over a
+    // rep-chosen date range — see costReport.js.
+    generate: (startDate, endDate) => ipcRenderer.invoke('costReport:generate', { startDate, endDate })
+  },
+  calls: {
+    // How many times each phone number's been dialed, and on what dates —
+    // see dailyMetrics.js's getPhoneCallHistory. Used by PropertyPanel.jsx.
+    phoneHistory: () => ipcRenderer.invoke('calls:phone-history')
   }
 }
 

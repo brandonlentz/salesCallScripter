@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { createAnthropicClient } from './anthropicClient.js'
 import { recordUsage } from './usageTracker.js'
 
 // Distills an uploaded PDF (NEPQ framework material — Jeremy Miner training
@@ -30,7 +30,7 @@ let client = null
 
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) return null
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  if (!client) client = createAnthropicClient()
   return client
 }
 

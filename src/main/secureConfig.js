@@ -10,14 +10,13 @@ import { join } from 'node:path'
 // copy of userData isn't a plaintext credential dump.
 const CONFIG_KEYS = [
   'ANTHROPIC_API_KEY',
+  'ANTHROPIC_WORKSPACE_ID',
   'DEEPGRAM_API_KEY',
   'REISIFT_WEBHOOK_SITE_URL',
   'WEBHOOK_SITE_API_KEY',
-  // Outbound Zapier Catch Hook URLs — see reisiftOutbound.js and the
-  // README's "Pushing dispositions and new contacts back to REISift".
-  'REISIFT_ZAPIER_STATUS_WEBHOOK_URL',
-  'REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL',
-  'REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL'
+  // Outbound Zapier Catch Hook URL — see reisiftOutbound.js and the
+  // README's "Pushing dispositions to REISift".
+  'REISIFT_ZAPIER_WEBHOOK_URL'
 ]
 
 const REQUIRED_KEYS = ['ANTHROPIC_API_KEY', 'DEEPGRAM_API_KEY']

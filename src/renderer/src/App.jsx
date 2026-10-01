@@ -6,6 +6,8 @@ import PropertyPanel from './PropertyPanel'
 import ScriptVariantPanel from './ScriptVariantPanel'
 import NepqReferencePanel from './NepqReferencePanel'
 import UsageMeter from './UsageMeter'
+import CallMetrics from './CallMetrics'
+import CostReportModal from './CostReportModal'
 
 const ORIGINAL_VARIANT = { id: 'original', label: 'Original' }
 
@@ -82,6 +84,7 @@ function App() {
   const [variantSections, setVariantSections] = useState(null)
   const [variantPanelOpen, setVariantPanelOpen] = useState(false)
   const [nepqPanelOpen, setNepqPanelOpen] = useState(false)
+  const [costReportOpen, setCostReportOpen] = useState(false)
 
   const refreshVariants = useCallback(() => {
     window.api.scriptVariants.list(callType).then(setVariants)
@@ -227,6 +230,9 @@ function App() {
           <button type="button" onClick={() => setNepqPanelOpen(true)}>
             NEPQ Framework
           </button>
+          <button type="button" onClick={() => setCostReportOpen(true)}>
+            Cost Report
+          </button>
           <button type="button" onClick={() => setPropertyOpen(true)}>
             {selectedProperty ? `Property: ${selectedProperty.label}` : 'Property'}
           </button>
@@ -252,6 +258,7 @@ function App() {
               A+
             </button>
           </div>
+          <CallMetrics />
           <UsageMeter />
         </div>
       </header>
@@ -344,6 +351,7 @@ function App() {
       />
 
       <NepqReferencePanel open={nepqPanelOpen} onClose={() => setNepqPanelOpen(false)} />
+      <CostReportModal open={costReportOpen} onClose={() => setCostReportOpen(false)} />
     </div>
   )
 }

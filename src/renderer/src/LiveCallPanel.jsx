@@ -509,6 +509,7 @@ export default function LiveCallPanel({
         <CallSummaryModal
           open={summary.open}
           recordingDir={summary.recordingDir}
+          callType={callType}
           status={summary.status}
           error={summary.error}
           analysis={summary.analysis}

@@ -1,47 +1,98 @@
+import { app } from 'electron'
+import { appendFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { toReisiftPhoneStatus } from './reisiftPhoneStatus.js'
+
 // Outbound counterpart to reisiftWebhookSocket.js — that file receives
 // REISift's data; this one sends this app's data back out. REISift doesn't
 // publish a general inbound REST API, so the only documented way to push
 // data *into* REISift is through its Zapier integration, which (per
 // REISift's own docs) works exclusively as a Zapier Action — it receives
-// data, it doesn't emit triggers. The setup on the REISift/Zapier side is:
-// a Zap per event below, each starting with "Webhooks by Zapier" → "Catch
-// Hook" (that step's URL is what goes in the three env vars this module
-// reads), followed by the matching REISift action — see the README's
-// "Pushing dispositions and new contacts back to REISift" section.
+// data, it doesn't emit triggers.
 //
-// Each event here only ever fires for a property REISift already knows
-// about (has a reisiftUuid from a prior inbound sync — see properties.js's
-// detectOutboundChanges) — there's no REISift record to attach anything to
-// otherwise.
+// One event, fired the moment a phone is dispositioned (see properties.js's
+// detectDispositions) — not three separate ones for "new contact"/"new
+// phone"/"status changed". By the time a rep dispositions a call, the
+// contact, the phone number, and the status are all known at once, and
+// REISift's own action can create-or-update, so there's no need to
+// distinguish "this is a brand-new number" from "this number already
+// existed" on the way out — one Zap, one Catch Hook URL, covers all of it.
+// See the README's "Pushing dispositions to REISift" section for the Zap
+// setup.
 //
-// Sent in real time, one item per push — no local batching/scheduling.
-// Hourly batching, if wanted, is handled Zapier-side (e.g. Digest by
-// Zapier collecting pushes and releasing them on a schedule) rather than
-// this app queuing anything itself.
+// Only ever fires for a property REISift already knows about (has a
+// reisiftUuid from a prior inbound sync) — there's no REISift record to
+// attach anything to otherwise.
+//
+// Sent in real time, one item per push — no local batching/scheduling. If
+// you want changes to land on a schedule instead, that's simpler to build
+// on the Zapier side (e.g. Digest by Zapier) than duplicating scheduling
+// logic here too.
 //
 // Uses Electron main process's built-in `fetch` — no new dependency, and
 // unlike reisiftWebhookSocket's persistent webhook.site socket, this is
 // plain one-shot request/response, so a webhook.site relay isn't needed:
 // this app is the one initiating the connection, so there's no inbound-NAT
 // problem to work around.
-let statusWebhookUrl = ''
-let newPhoneWebhookUrl = ''
-let newContactWebhookUrl = ''
+let webhookUrl = ''
 let onStatus = () => {}
 
 export function configureReisiftOutbound(config = {}) {
-  statusWebhookUrl = config.statusWebhookUrl || ''
-  newPhoneWebhookUrl = config.newPhoneWebhookUrl || ''
-  newContactWebhookUrl = config.newContactWebhookUrl || ''
+  webhookUrl = config.webhookUrl || ''
   onStatus = config.onStatus || (() => {})
 }
 
+// REISift's Zapier actions identify a property by its individual address
+// fields (street/city/state/postal code), not by property.uuid — confirmed
+// when the "Create/Update Property" action's own field list turned out to
+// ask for exactly these, not a uuid lookup. propertyAddress (properties.js)
+// is only the joined display string, so pull the components stored
+// alongside it (see mapReisiftProperty) instead of re-splitting that string.
+function reisiftAddressFields(property) {
+  return {
+    propertyStreet: property.addressStreet || '',
+    propertyCity: property.addressCity || '',
+    propertyState: property.addressState || '',
+    propertyPostalCode: property.addressPostalCode || ''
+  }
+}
+
+// REISift's inbound owner shape (see mapReisiftOwnerToContact) always has
+// separate first_name/last_name — its Create/Update actions likely want the
+// same, not the single combined `name` string this app stores locally, so
+// split it back out. Best-effort: everything after the first word is
+// "last name", which is wrong for multi-word first names, but there's no
+// better signal to go on for a locally-typed contact.
+function splitContactName(name) {
+  const parts = (name || '').trim().split(/\s+/)
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') }
+}
+
 // Fire-and-forget from the caller's perspective (properties.js never awaits
-// these) so a slow/failing Zap never delays or blocks a local save — same
+// this) so a slow/failing Zap never delays or blocks a local save — same
 // tolerance for eventual consistency the inbound sync already has.
-async function post(webhookUrl, body, label) {
+export function notifyPhoneDispositioned({ property, contact, phone }) {
   if (!webhookUrl) return
 
+  const body = {
+    event: 'phone_dispositioned',
+    reisiftPropertyUuid: property.reisiftUuid,
+    ...reisiftAddressFields(property),
+    propertyLabel: property.label,
+    reisiftOwnerUuid: contact.reisiftUuid || '',
+    contactName: contact.name,
+    ...splitContactName(contact.name),
+    relationship: contact.relationship,
+    phoneNumber: phone.number,
+    phoneLabel: phone.label,
+    status: toReisiftPhoneStatus(phone.status),
+    timestamp: new Date().toISOString()
+  }
+
+  return post(body)
+}
+
+async function post(body) {
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
@@ -50,83 +101,26 @@ async function post(webhookUrl, body, label) {
       signal: AbortSignal.timeout(10000)
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    console.log(`[reisift-outbound] ${label} pushed`)
-    onStatus(`→ REISift: ${label} pushed`)
+    console.log('[reisift-outbound] disposition pushed')
+    onStatus('→ REISift: disposition pushed')
+    logZapFire({ at: Date.now(), success: true })
   } catch (err) {
-    console.error(`[reisift-outbound] ${label} push failed:`, err.message)
-    onStatus(`→ REISift: ${label} push failed (${err.message})`)
+    console.error('[reisift-outbound] disposition push failed:', err.message)
+    onStatus(`→ REISift: disposition push failed (${err.message})`)
+    logZapFire({ at: Date.now(), success: false, error: err.message })
   }
 }
 
-// REISift's "Add Phone Status to Phones" Zapier action exposes Phone's
-// Status as a fixed enum, not free text — confirmed from the actual field
-// picker: UNKNOWN, CORRECT, CORRECT_DNC, WRONG, WRONG_DNC, DEAD, NO_ANSWER,
-// DNC. This app's own status values (phoneStatuses.js's PHONE_STATUSES)
-// are lowercase/hyphenated for its own UI, so translate rather than assume
-// they line up — REISift's dropdown doesn't accept 'no-answer' as-is.
-// REISift's CORRECT_DNC/WRONG_DNC (correctness + DNC combined) have no
-// local equivalent — this app treats DNC as its own exclusive status — so
-// there's nothing to map to them.
-const REISIFT_STATUS_BY_LOCAL_STATUS = {
-  '': 'UNKNOWN',
-  correct: 'CORRECT',
-  wrong: 'WRONG',
-  'no-answer': 'NO_ANSWER',
-  dnc: 'DNC',
-  dead: 'DEAD'
+// Durable append-only log (JSON Lines, same convention as
+// usageTracker.js's usage log) of every push attempt, so costReport.js can
+// answer "how many Zaps fired over date range X" — nothing about this app's
+// Zapier usage was persisted anywhere before this.
+function zapLogPath() {
+  return join(app.getPath('userData'), 'zapLog.jsonl')
 }
 
-function toReisiftPhoneStatus(localStatus) {
-  return REISIFT_STATUS_BY_LOCAL_STATUS[localStatus] ?? 'UNKNOWN'
-}
-
-export function notifyPhoneStatusChanged({ property, contact, phone }) {
-  return post(
-    statusWebhookUrl,
-    {
-      event: 'phone_status_updated',
-      reisiftPropertyUuid: property.reisiftUuid,
-      reisiftOwnerUuid: contact.reisiftUuid,
-      contactName: contact.name,
-      propertyLabel: property.label,
-      phoneNumber: phone.number,
-      phoneLabel: phone.label,
-      status: toReisiftPhoneStatus(phone.status),
-      timestamp: new Date().toISOString()
-    },
-    'phone status'
-  )
-}
-
-export function notifyNewPhoneNumber({ property, contact, phone }) {
-  return post(
-    newPhoneWebhookUrl,
-    {
-      event: 'phone_number_added',
-      reisiftPropertyUuid: property.reisiftUuid,
-      reisiftOwnerUuid: contact.reisiftUuid,
-      contactName: contact.name,
-      propertyLabel: property.label,
-      phoneNumber: phone.number,
-      phoneLabel: phone.label,
-      timestamp: new Date().toISOString()
-    },
-    'new phone number'
-  )
-}
-
-export function notifyNewContact({ property, contact }) {
-  return post(
-    newContactWebhookUrl,
-    {
-      event: 'contact_added',
-      reisiftPropertyUuid: property.reisiftUuid,
-      contactName: contact.name,
-      relationship: contact.relationship,
-      propertyLabel: property.label,
-      phones: (contact.phones ?? []).map((p) => ({ number: p.number, label: p.label })),
-      timestamp: new Date().toISOString()
-    },
-    'new contact'
-  )
+function logZapFire(entry) {
+  appendFile(zapLogPath(), JSON.stringify(entry) + '\n', 'utf-8').catch((err) => {
+    console.error('[reisift-outbound] failed to append zap log:', err.message)
+  })
 }

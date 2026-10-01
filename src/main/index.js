@@ -25,12 +25,23 @@ import { listReferences, saveReference, deleteReference } from './nepqReferences
 import { parseNepqReference } from './parseNepqReference.js'
 import { analyzeCall } from './callAnalysis.js'
 import { initUsageTracker, getUsageSnapshot } from './usageTracker.js'
+import { getTodayCallMetrics, getPhoneCallHistory } from './dailyMetrics.js'
+import { setOfferOutcome } from './recording.js'
+import { generateCostReport } from './costReport.js'
 import { startReisiftWebhookSocket } from './reisiftWebhookSocket.js'
 import { configureReisiftOutbound } from './reisiftOutbound.js'
 
 // Both src/main/index.js (dev) and out/main/index.js (built) sit exactly two
 // directories below the project root, so this resolves correctly either way.
 const appRootDir = join(import.meta.dirname, '../..')
+
+// A packaged app's own files live inside a read-only app.asar archive —
+// recordings/ and transcripts/ (real call audio/PII, not app code) need an
+// actual writable directory, which appRootDir isn't once packaged. In dev,
+// appRootDir already IS a normal writable repo checkout, so this changes
+// nothing there — only the packaged case moves these into Electron's
+// userData dir, the same place properties.json/config.json already live.
+const dataRoot = app.isPackaged ? app.getPath('userData') : appRootDir
 
 loadEnv({ path: join(appRootDir, '.env'), quiet: true })
 
@@ -67,8 +78,8 @@ function createWindow() {
 }
 
 function registerIpcHandlers() {
-  ipcMain.handle('training:list-transcripts', () => listTranscripts(appRootDir))
-  ipcMain.handle('training:load-transcript', (_event, id) => loadTranscript(appRootDir, id))
+  ipcMain.handle('training:list-transcripts', () => listTranscripts(dataRoot))
+  ipcMain.handle('training:load-transcript', (_event, id) => loadTranscript(dataRoot, id))
   ipcMain.handle('suggestions:get', (_event, { transcriptText, callType, property, variantId }) =>
     getSuggestions(transcriptText, callType, property, variantId)
   )
@@ -90,6 +101,11 @@ function registerIpcHandlers() {
   ipcMain.handle('recordings:reveal', (_event, dir) => {
     if (dir) shell.showItemInFolder(dir)
   })
+  // Offer Made / Offer Declined — set from CallSummaryModal.jsx right after
+  // an "offer" call ends, so the Cost Report (costReport.js) can count them.
+  ipcMain.handle('recordings:set-offer-outcome', (_event, { dir, outcome }) =>
+    setOfferOutcome(dir, outcome)
+  )
   ipcMain.handle('properties:list', () => listProperties())
   ipcMain.handle('properties:search', (_event, query) => searchProperties(query))
   ipcMain.handle('properties:save', (_event, data) => saveProperty(data))
@@ -120,7 +136,22 @@ function registerIpcHandlers() {
     shell.openExternal(`sms:${digitsOnly(phoneNumber)}`)
   })
   ipcMain.handle('usage:get', () => getUsageSnapshot())
-  registerLiveCallHandlers(() => mainWindow, appRootDir)
+  // Dials Made / Calls Answered (>90s) — see dailyMetrics.js. Live updates
+  // push over 'metrics:update' from liveCall.js's live-call:stop handler,
+  // right after a call's meta.json is written; this is the one-shot pull
+  // for seeding a panel that mounts mid-session.
+  ipcMain.handle('metrics:get-today', () => getTodayCallMetrics(dataRoot))
+  // Per-phone-number call history (PropertyPanel.jsx) — how many times a
+  // number's been dialed and on what dates. See dailyMetrics.js.
+  ipcMain.handle('calls:phone-history', () => getPhoneCallHistory(dataRoot))
+  // Cost Report button (CostReportModal.jsx) — AI usage cost broken down by
+  // suggestions/call-analysis/other, Zap fire count, and call-activity
+  // totals (dials, answered, conversations, offers), over a rep-chosen date
+  // range. See costReport.js.
+  ipcMain.handle('costReport:generate', (_event, { startDate, endDate }) =>
+    generateCostReport({ startDate, endDate, dataRoot })
+  )
+  registerLiveCallHandlers(() => mainWindow, dataRoot)
 
   // First-run Setup screen (src/renderer/src/SetupScreen.jsx) — gates the
   // main app on the two required keys being present, and lets a teammate
@@ -130,18 +161,12 @@ function registerIpcHandlers() {
   ipcMain.handle('config:save', (_event, values) => {
     const updates = {}
     if (values.anthropicApiKey) updates.ANTHROPIC_API_KEY = values.anthropicApiKey.trim()
+    if (values.anthropicWorkspaceId)
+      updates.ANTHROPIC_WORKSPACE_ID = values.anthropicWorkspaceId.trim()
     if (values.deepgramApiKey) updates.DEEPGRAM_API_KEY = values.deepgramApiKey.trim()
     if (values.reisiftWebhookUrl) updates.REISIFT_WEBHOOK_SITE_URL = values.reisiftWebhookUrl.trim()
     if (values.webhookSiteApiKey) updates.WEBHOOK_SITE_API_KEY = values.webhookSiteApiKey.trim()
-    if (values.zapierStatusWebhookUrl) {
-      updates.REISIFT_ZAPIER_STATUS_WEBHOOK_URL = values.zapierStatusWebhookUrl.trim()
-    }
-    if (values.zapierNewPhoneWebhookUrl) {
-      updates.REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL = values.zapierNewPhoneWebhookUrl.trim()
-    }
-    if (values.zapierNewContactWebhookUrl) {
-      updates.REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL = values.zapierNewContactWebhookUrl.trim()
-    }
+    if (values.zapierWebhookUrl) updates.REISIFT_ZAPIER_WEBHOOK_URL = values.zapierWebhookUrl.trim()
     saveStoredConfig(updates)
     // Simplest way to guarantee every module that reads these (the
     // Anthropic/Deepgram clients, the REISift socket) picks up the new
@@ -165,12 +190,11 @@ function registerIpcHandlers() {
     const parsed = parseEnv(readFileSync(filePaths[0]))
     return {
       anthropicApiKey: parsed.ANTHROPIC_API_KEY || '',
+      anthropicWorkspaceId: parsed.ANTHROPIC_WORKSPACE_ID || '',
       deepgramApiKey: parsed.DEEPGRAM_API_KEY || '',
       reisiftWebhookUrl: parsed.REISIFT_WEBHOOK_SITE_URL || '',
       webhookSiteApiKey: parsed.WEBHOOK_SITE_API_KEY || '',
-      zapierStatusWebhookUrl: parsed.REISIFT_ZAPIER_STATUS_WEBHOOK_URL || '',
-      zapierNewPhoneWebhookUrl: parsed.REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL || '',
-      zapierNewContactWebhookUrl: parsed.REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL || ''
+      zapierWebhookUrl: parsed.REISIFT_ZAPIER_WEBHOOK_URL || ''
     }
   })
 }
@@ -200,14 +224,13 @@ app.whenReady().then(() => {
     onStatus: (message) => mainWindow?.webContents.send('reisift:status', message)
   })
 
-  // Outbound direction — pushes dispositions/new numbers/new contacts back
-  // to REISift via Zapier (see reisiftOutbound.js and properties.js's
-  // detectOutboundChanges). Reuses the same 'reisift:status' line above for
-  // push confirmations/failures rather than adding new UI.
+  // Outbound direction — pushes a phone's disposition (contact, phone, and
+  // status together) back to REISift via Zapier the moment it's set — see
+  // reisiftOutbound.js and properties.js's detectDispositions. Reuses the
+  // same 'reisift:status' line above for push confirmations/failures
+  // rather than adding new UI.
   configureReisiftOutbound({
-    statusWebhookUrl: process.env.REISIFT_ZAPIER_STATUS_WEBHOOK_URL,
-    newPhoneWebhookUrl: process.env.REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL,
-    newContactWebhookUrl: process.env.REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL,
+    webhookUrl: process.env.REISIFT_ZAPIER_WEBHOOK_URL,
     onStatus: (message) => mainWindow?.webContents.send('reisift:status', message)
   })
 

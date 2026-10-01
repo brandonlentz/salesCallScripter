@@ -2,7 +2,8 @@ import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { notifyPhoneStatusChanged, notifyNewPhoneNumber, notifyNewContact } from './reisiftOutbound.js'
+import { notifyPhoneDispositioned } from './reisiftOutbound.js'
+import { fromReisiftPhoneStatus } from './reisiftPhoneStatus.js'
 
 // Local, file-based store for property/lead context (deceased owner, tax
 // status, known heirs, prior contact notes, etc.) that the suggestion
@@ -105,20 +106,16 @@ export async function updateProperty(id, data) {
   properties[index] = updated
   await writeAll(properties)
 
-  // Push disposition/new-number changes out to REISift (see
-  // reisiftOutbound.js) — only meaningful for a property REISift already
+  // Push a phone's disposition out to REISift (see reisiftOutbound.js) the
+  // moment it's set — one combined event carries the contact (add-or-update
+  // semantics, so a brand-new contact/number is fine) and the phone/status
+  // together, rather than three separate events for "new contact"/"new
+  // phone"/"status changed". Only meaningful for a property REISift already
   // knows about, and never triggered by upsertPropertyFromReisift below, so
   // an inbound sync can never loop back out as an outbound push.
   if (data.contacts) {
-    const { statusChanges, newPhones, newContacts } = detectOutboundChanges(existing, data.contacts)
-    for (const { contact, phone } of statusChanges) {
-      notifyPhoneStatusChanged({ property: updated, contact, phone })
-    }
-    for (const { contact, phone } of newPhones) {
-      notifyNewPhoneNumber({ property: updated, contact, phone })
-    }
-    for (const { contact } of newContacts) {
-      notifyNewContact({ property: updated, contact })
+    for (const { contact, phone } of detectDispositions(existing, data.contacts)) {
+      notifyPhoneDispositioned({ property: updated, contact, phone })
     }
   }
 
@@ -126,48 +123,38 @@ export async function updateProperty(id, data) {
 }
 
 // Diffs the contacts array a caller is about to save (`newContacts`)
-// against what was already on file (`oldProperty`) to figure out what's
-// worth pushing to REISift — see updateProperty above and the README's
-// "Pushing dispositions and new contacts back to REISift" section. Every
-// phone-status button and every manual property edit funnels through
-// updateProperty, so this is the one place that ever needs to run.
-function detectOutboundChanges(oldProperty, newContacts) {
-  const statusChanges = []
-  const newPhones = []
-  const newContacts_ = []
+// against what was already on file (`oldProperty`) to find phones that were
+// just dispositioned — a status appearing for the first time, or changing
+// from what it was — which is the one moment this app pushes to REISift
+// (see updateProperty above and the README's "Pushing dispositions to
+// REISift" section). A new contact or a new number with no status yet
+// isn't pushed until it actually gets dispositioned — every phone-status
+// button and every manual property edit funnels through updateProperty, so
+// this is the one place that ever needs to run.
+function detectDispositions(oldProperty, newContacts) {
+  const dispositions = []
 
   // Nothing to attach a push to — this property has no REISift record yet.
-  if (!oldProperty?.reisiftUuid) return { statusChanges, newPhones, newContacts: newContacts_ }
+  if (!oldProperty?.reisiftUuid) return dispositions
 
   const oldContacts = oldProperty.contacts ?? []
 
   for (const contact of newContacts) {
-    if (contact.reisiftUuid) {
-      const oldContact = oldContacts.find((c) => c.reisiftUuid === contact.reisiftUuid)
-      const oldPhones = oldContact?.phones ?? []
-      for (const phone of contact.phones ?? []) {
-        if (!phone.number) continue
-        const oldPhone = oldPhones.find((p) => p.number === phone.number)
-        if (!oldPhone) {
-          newPhones.push({ contact, phone })
-        } else if (phone.status && phone.status !== oldPhone.status) {
-          statusChanges.push({ contact, phone })
-        }
+    const oldContact = contact.reisiftUuid
+      ? oldContacts.find((c) => c.reisiftUuid === contact.reisiftUuid)
+      : oldContacts.find((c) => !c.reisiftUuid && c.name === contact.name)
+    const oldPhones = oldContact?.phones ?? []
+
+    for (const phone of contact.phones ?? []) {
+      if (!phone.number || !phone.status) continue // no disposition set — nothing to push yet
+      const oldPhone = oldPhones.find((p) => p.number === phone.number)
+      if (!oldPhone || oldPhone.status !== phone.status) {
+        dispositions.push({ contact, phone })
       }
-    } else {
-      // No reisiftUuid — either a pre-existing local-only contact (matched
-      // by name, e.g. a heir the rep added by hand before REISift ever
-      // knew about them) or a genuinely brand-new one. Only the latter is
-      // worth pushing — REISift can't be told about a change to someone it
-      // doesn't have a record for either way, so a pre-existing local-only
-      // contact just isn't synced at all until pushed once as new.
-      const oldContact = oldContacts.find((c) => !c.reisiftUuid && c.name === contact.name)
-      const hasNumber = (contact.phones ?? []).some((p) => p.number)
-      if (!oldContact && hasNumber) newContacts_.push({ contact })
     }
   }
 
-  return { statusChanges, newPhones, newContacts: newContacts_ }
+  return dispositions
 }
 
 export async function deleteProperty(id) {
@@ -227,7 +214,13 @@ function mapReisiftOwnerToContact(owner, relationship) {
       .map((p) => ({
         number: p.number,
         label: (p.tags ?? []).join(', '),
-        status: owner.dnc ? 'dnc' : ''
+        // owner.dnc (a compliance flag on the whole owner, not one number)
+        // forces every one of their phones regardless of that phone's own
+        // status — same override REISift itself applies. Otherwise use the
+        // phone's own status straight from REISift's payload (confirmed via
+        // a real webhook delivery: each phone carries its own
+        // UNKNOWN/CORRECT/WRONG/NO_ANSWER/DEAD/DNC, independent of tags).
+        status: owner.dnc ? 'dnc' : fromReisiftPhoneStatus(p.status)
       }))
   }
 }
@@ -244,6 +237,14 @@ function mapReisiftProperty(raw) {
     reisiftUuid: raw.uuid,
     label: ownerContact?.name || formatReisiftAddress(raw.address) || 'Untitled property',
     propertyAddress: formatReisiftAddress(raw.address),
+    // Kept as separate components (not just the joined propertyAddress
+    // string above) because REISift's own Zapier actions identify a
+    // property by its individual address fields, not by property.uuid —
+    // see notifyPhoneDispositioned in reisiftOutbound.js.
+    addressStreet: raw.address?.street || '',
+    addressCity: raw.address?.city || '',
+    addressState: raw.address?.state || '',
+    addressPostalCode: raw.address?.postal_code || '',
     deceasedName: ownerContact?.deceased ? ownerContact.name : '',
     taxStatus: summarizeReisiftTaxStatus(raw),
     knownHeirs: secondaryContacts.map((c) => c.name).filter(Boolean).join(', '),
@@ -265,7 +266,13 @@ function mergePhone(existingPhones, incoming) {
   return {
     ...existing,
     label: incoming.label || existing.label,
-    status: incoming.status === 'dnc' ? 'dnc' : existing.status
+    // REISift's own phone status wins once it actually has one — covers
+    // both "another rep changed it directly in REISift" and "our own
+    // notifyPhoneDispositioned push landed and this sync is just REISift
+    // echoing it back". Blank (REISift's status was UNKNOWN, i.e. nothing
+    // set there yet — see fromReisiftPhoneStatus) never overwrites a
+    // disposition already set locally but not yet reflected on their side.
+    status: incoming.status || existing.status
   }
 }
 
@@ -278,10 +285,11 @@ function mergeReisiftContacts(existingContacts, incomingContacts) {
 
   for (const incoming of incomingContacts) {
     let index = merged.findIndex((c) => c.reisiftUuid === incoming.reisiftUuid)
-    // No reisiftUuid match — this may be a contact this app pushed to
-    // REISift as brand-new (see properties.js's notifyNewContact) that
-    // REISift has now created and is syncing back with its own uuid for
-    // the first time. Adopt the uuid onto the matching local-only contact
+    // No reisiftUuid match — this may be a contact this app dispositioned
+    // and pushed to REISift while brand-new (see reisiftOutbound.js's
+    // notifyPhoneDispositioned) that REISift has now created and is
+    // syncing back with its own uuid for the first time. Adopt the uuid
+    // onto the matching local-only contact
     // (same name + at least one shared number) instead of appending a
     // duplicate.
     if (index === -1) {
@@ -351,6 +359,10 @@ export async function upsertPropertyFromReisift(rawReisiftProperty) {
     // sync only fills it in while it's still blank.
     label: existing.label?.trim() ? existing.label : mapped.label,
     propertyAddress: mapped.propertyAddress || existing.propertyAddress,
+    addressStreet: mapped.addressStreet || existing.addressStreet,
+    addressCity: mapped.addressCity || existing.addressCity,
+    addressState: mapped.addressState || existing.addressState,
+    addressPostalCode: mapped.addressPostalCode || existing.addressPostalCode,
     deceasedName: mapped.deceasedName || existing.deceasedName,
     taxStatus: mapped.taxStatus || existing.taxStatus,
     knownHeirs: mapped.knownHeirs || existing.knownHeirs,

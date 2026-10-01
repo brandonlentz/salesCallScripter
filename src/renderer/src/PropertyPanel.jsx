@@ -27,6 +27,20 @@ function allPhones(property) {
   )
 }
 
+// "Called 3x · last 9/30" badge for one phone number, from phoneHistory
+// (see dailyMetrics.js's getPhoneCallHistory) — every past call date is in
+// the tooltip rather than cluttering the row itself.
+function PhoneCallHistoryBadge({ history, number }) {
+  const entry = history[number]
+  if (!entry?.count) return null
+  const dates = entry.dates.map((d) => new Date(d).toLocaleDateString())
+  return (
+    <span className="phone-call-history" title={`Called on: ${dates.join(', ')}`}>
+      ☎️ {entry.count}× · last {dates[0]}
+    </span>
+  )
+}
+
 // Slide-in drawer for picking which property/lead the current call is
 // about, so the suggestion engine can ground its coaching in this specific
 // deceased owner, tax situation, known heirs, etc. — not just the generic
@@ -49,6 +63,11 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
   const [tab, setTab] = useState('properties') // 'properties' | 'quick'
   const [quickName, setQuickName] = useState('')
   const [quickNumber, setQuickNumber] = useState('')
+  // How many times each phone number's been dialed, and on what dates (see
+  // dailyMetrics.js's getPhoneCallHistory) — keyed by the exact dialed
+  // number string, refreshed each time the drawer opens so a call made
+  // earlier in the session shows up next time a rep looks.
+  const [phoneHistory, setPhoneHistory] = useState({})
 
   async function refresh(q) {
     setResults(await window.api.properties.search(q))
@@ -59,6 +78,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
     setView('list')
     setError('')
     refresh(query)
+    window.api.calls.phoneHistory().then(setPhoneHistory)
     // Only re-run on open — the query effect below handles typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -396,6 +416,7 @@ export default function PropertyPanel({ open, onClose, selected, onSelect, onUpd
                                     >
                                       💬
                                     </button>
+                                    <PhoneCallHistoryBadge history={phoneHistory} number={p.number} />
                                     {/* Only a saved property has an id to persist a status
                                         update against — a Quick Call's synthetic property
                                         (see handleQuickCall) has nothing to save it to. */}

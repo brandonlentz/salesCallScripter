@@ -5,12 +5,11 @@ import { useState } from 'react'
 // config:save handler) so it never appears again after that.
 export default function SetupScreen() {
   const [anthropicApiKey, setAnthropicApiKey] = useState('')
+  const [anthropicWorkspaceId, setAnthropicWorkspaceId] = useState('')
   const [deepgramApiKey, setDeepgramApiKey] = useState('')
   const [reisiftWebhookUrl, setReisiftWebhookUrl] = useState('')
   const [webhookSiteApiKey, setWebhookSiteApiKey] = useState('')
-  const [zapierStatusWebhookUrl, setZapierStatusWebhookUrl] = useState('')
-  const [zapierNewPhoneWebhookUrl, setZapierNewPhoneWebhookUrl] = useState('')
-  const [zapierNewContactWebhookUrl, setZapierNewContactWebhookUrl] = useState('')
+  const [zapierWebhookUrl, setZapierWebhookUrl] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -19,12 +18,11 @@ export default function SetupScreen() {
     const parsed = await window.api.config.importEnvFile()
     if (!parsed) return
     if (parsed.anthropicApiKey) setAnthropicApiKey(parsed.anthropicApiKey)
+    if (parsed.anthropicWorkspaceId) setAnthropicWorkspaceId(parsed.anthropicWorkspaceId)
     if (parsed.deepgramApiKey) setDeepgramApiKey(parsed.deepgramApiKey)
     if (parsed.reisiftWebhookUrl) setReisiftWebhookUrl(parsed.reisiftWebhookUrl)
     if (parsed.webhookSiteApiKey) setWebhookSiteApiKey(parsed.webhookSiteApiKey)
-    if (parsed.zapierStatusWebhookUrl) setZapierStatusWebhookUrl(parsed.zapierStatusWebhookUrl)
-    if (parsed.zapierNewPhoneWebhookUrl) setZapierNewPhoneWebhookUrl(parsed.zapierNewPhoneWebhookUrl)
-    if (parsed.zapierNewContactWebhookUrl) setZapierNewContactWebhookUrl(parsed.zapierNewContactWebhookUrl)
+    if (parsed.zapierWebhookUrl) setZapierWebhookUrl(parsed.zapierWebhookUrl)
   }
 
   async function handleSave() {
@@ -37,12 +35,11 @@ export default function SetupScreen() {
     try {
       await window.api.config.save({
         anthropicApiKey,
+        anthropicWorkspaceId,
         deepgramApiKey,
         reisiftWebhookUrl,
         webhookSiteApiKey,
-        zapierStatusWebhookUrl,
-        zapierNewPhoneWebhookUrl,
-        zapierNewContactWebhookUrl
+        zapierWebhookUrl
       })
       // App relaunches itself right after this resolves — nothing more to do.
     } catch (err) {
@@ -78,6 +75,19 @@ export default function SetupScreen() {
           <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
             Get a key
           </a>
+        </label>
+
+        <label className="setup__field">
+          <span>
+            Anthropic workspace ID{' '}
+            <em>(only if the key above is an org-level key, not scoped to a workspace)</em>
+          </span>
+          <input
+            type="text"
+            value={anthropicWorkspaceId}
+            onChange={(e) => setAnthropicWorkspaceId(e.target.value)}
+            placeholder="wrkspc_..."
+          />
         </label>
 
         <label className="setup__field">
@@ -120,36 +130,12 @@ export default function SetupScreen() {
 
         <label className="setup__field">
           <span>
-            Zapier webhook — phone status <em>(pushes call dispositions to REISift)</em>
+            Zapier webhook <em>(pushes call dispositions — contact, phone, and status — to REISift)</em>
           </span>
           <input
             type="text"
-            value={zapierStatusWebhookUrl}
-            onChange={(e) => setZapierStatusWebhookUrl(e.target.value)}
-            placeholder="https://hooks.zapier.com/hooks/catch/..."
-          />
-        </label>
-
-        <label className="setup__field">
-          <span>
-            Zapier webhook — new phone number <em>(pushes new numbers on known contacts)</em>
-          </span>
-          <input
-            type="text"
-            value={zapierNewPhoneWebhookUrl}
-            onChange={(e) => setZapierNewPhoneWebhookUrl(e.target.value)}
-            placeholder="https://hooks.zapier.com/hooks/catch/..."
-          />
-        </label>
-
-        <label className="setup__field">
-          <span>
-            Zapier webhook — new contact <em>(pushes brand-new contacts)</em>
-          </span>
-          <input
-            type="text"
-            value={zapierNewContactWebhookUrl}
-            onChange={(e) => setZapierNewContactWebhookUrl(e.target.value)}
+            value={zapierWebhookUrl}
+            onChange={(e) => setZapierWebhookUrl(e.target.value)}
             placeholder="https://hooks.zapier.com/hooks/catch/..."
           />
         </label>

@@ -334,82 +334,90 @@ created once and updated in place on every later webhook, no duplicates:
   (rolled into a one-line `taxStatus` summary), contacts and their phone numbers/tags, and
   REISift's own status/tags/lists (shown as a `🔄` badge on the selected property).
 - **You own** (a sync never touches these once set): the property's display label, offer amount,
-  pain-points summary, and each phone's local call-outcome tag (see [Multiple contacts, multiple
-  numbers](#multiple-contacts-multiple-numbers) below) — *except* REISift reporting a contact as
-  DNC always forces that tag to **DNC** regardless of what was set locally, since that's a
-  compliance signal, not a coaching note.
+  and pain-points summary.
+- **Each phone's call-outcome tag (disposition) is bidirectional**, not rep-only: REISift's own
+  per-phone status (✅/❌/📵/🚫/💀 — see [Multiple contacts, multiple numbers](#multiple-contacts-multiple-numbers)
+  below) wins once it actually has a real value, whether that's because someone changed it
+  directly in REISift or because this app's own outbound push (see [Pushing dispositions to
+  REISift](#pushing-dispositions-to-reisift) below) already landed and a later sync is just
+  REISift echoing it back. A blank/`UNKNOWN` status from REISift (nothing set there yet) never
+  overwrites a disposition already set locally — so setting one here and having the Zap fail or
+  lag doesn't get clobbered by the next sync in the meantime. REISift reporting a contact as DNC
+  always forces that tag to **DNC** regardless, since that's a compliance signal, not a coaching
+  note.
 - Nothing is ever deleted by a sync — a contact or number missing from one payload isn't treated
   as proof they're gone, only new/changed data is applied.
 
-### Pushing dispositions and new contacts back to REISift
+### Pushing dispositions to REISift
 
-The sync above is one-directional (REISift → this app). This section is the other direction:
-setting a call disposition, adding a number to someone REISift already tracks, or adding a
-brand-new contact — all get pushed back out to REISift automatically, so there's no separate step
-in REISift's own UI. Three independent events, each optional (leave its webhook URL blank to
-disable just that one):
+The sync above is one-directional (REISift → this app). This section is the other direction: the
+moment you disposition a call (set a phone's call-outcome status), the contact, the phone number,
+and the status all push out to REISift together — one event, whether the contact/number is one
+REISift already had on file or brand-new. There's no separate "new phone" or "new contact" event —
+by the time a call gets dispositioned, this app already knows everything REISift needs, and
+REISift's own action can create-or-update, so there's nothing to gain from splitting it into
+several events (or several Zaps/webhook URLs) instead of one.
 
-| Event | Fires when... | REISift action to use |
-| --- | --- | --- |
-| `phone_status_updated` | You set a phone's call-outcome status (✅/❌/📵/🚫/💀) on a contact REISift already tracks | **Add Phone Status to Phones** — REISift's own default statuses are literally Correct/Wrong/No Answer/DNC/Dead, a direct match |
-| `phone_number_added` | A new number appears on a contact REISift already tracks | Whichever REISift action adds a phone to an existing owner (REISift doesn't have one dedicated to just this — `Create/Update Property` is the closest) |
-| `contact_added` | A brand-new person (no REISift record at all) is added to a property REISift already tracks | **Create Owner** |
+Only fires for a **property REISift already knows about** (has a `reisiftUuid` from a prior
+inbound sync) — there's no REISift record to attach anything to otherwise. A brand-new
+contact/number on that property still pushes fine (`reisiftOwnerUuid` just comes through blank);
+only the property itself needs a prior REISift link.
 
-All three only ever fire for a **property REISift already knows about** (has a `reisiftUuid` from
-a prior inbound sync) — there's no REISift record to attach anything to otherwise. A phone-status
-change or new number on a contact REISift tracks also requires that *contact* to have its own
-REISift identity (`reisiftUuid`); a brand-new contact obviously doesn't, which is exactly what
-`contact_added` is for.
+**Sent in real time, one item per push** — this app doesn't batch or schedule anything itself. If
+you want changes to land in REISift on an hourly cadence rather than instantly, build that on the
+Zapier side (e.g. a **Digest by Zapier** step collecting pushes and releasing them on a schedule,
+or a **Schedule by Zapier**-triggered Zap) rather than this app queuing anything — that's simpler
+than duplicating scheduling logic in both places, and Zapier already has purpose-built tools for
+it.
 
-**Sent in real time, one item per push** — this app doesn't batch or schedule anything itself.
-If you want changes to land in REISift on an hourly cadence rather than instantly, build that on
-the Zapier side (e.g. a **Digest by Zapier** step collecting pushes and releasing them on a
-schedule, or a **Schedule by Zapier**-triggered Zap) rather than this app queuing anything —
-that's simpler than duplicating scheduling logic in both places, and Zapier already has
-purpose-built tools for it.
-
-**Setup — one Zap per event, since REISift doesn't publish a general write API:**
+**Setup — one Zap, since REISift doesn't publish a general write API:**
 
 1. In Zapier, create a Zap starting with **Webhooks by Zapier → Catch Hook** as the trigger. Copy
    the Catch Hook URL it gives you.
-2. Paste that URL into `.env` (or the Setup screen) as the matching variable —
-   `REISIFT_ZAPIER_STATUS_WEBHOOK_URL`, `REISIFT_ZAPIER_NEW_PHONE_WEBHOOK_URL`, or
-   `REISIFT_ZAPIER_NEW_CONTACT_WEBHOOK_URL` — and restart the app.
-3. Trigger one real event in the app (set a phone's status, add a number, or add a contact,
-   matching whichever Zap you're building), then in Zapier click **Test trigger** to pull in that
-   sample payload.
-4. Add REISift's action from the table above as the next step, and map its fields from the
-   trigger's payload (payload field names are listed below to help with that — the exact input
-   fields REISift's action exposes aren't published anywhere outside Zapier's own action-config
-   screen, so map by matching names to what's on screen).
-5. Test the action step once (this really updates REISift), confirm it in REISift's UI, then turn
+2. Paste that URL into `.env` (or the Setup screen) as `REISIFT_ZAPIER_WEBHOOK_URL` and restart
+   the app.
+3. Disposition a real call in the app (any phone, any status) so something real reaches Zapier,
+   then in Zapier click **Test trigger** to pull in that sample payload.
+4. Add REISift's action as the next step — likely more than one action in sequence, since REISift
+   doesn't necessarily have a single action that both creates/updates a contact's phone *and* sets
+   its status: something like `Create/Update Property` (or whichever action actually
+   creates/updates an owner + phone — check what's on offer) to make sure the contact/number
+   exist, followed by **Add Phone Status to Phones** to set the status. Map fields from the
+   trigger's payload (listed below) — the exact input fields each REISift action exposes aren't
+   published anywhere outside Zapier's own action-config screen, so map by matching names to
+   what's on screen.
+5. Test each action step once (this really updates REISift), confirm it in REISift's UI, then turn
    the Zap on.
-6. Repeat steps 1–5 for however many of the three events you want live — they're independent Zaps.
 
-**Payload fields sent to each webhook** (JSON body, `POST`, one flat object per push):
+**Payload fields** (JSON body, `POST`, one flat object per push):
 
-- `phone_status_updated` / `phone_number_added`: `reisiftPropertyUuid`, `reisiftOwnerUuid`,
-  `contactName`, `propertyLabel`, `phoneNumber`, `phoneLabel`, `status` (status event only —
-  already translated to REISift's own enum: `UNKNOWN`/`CORRECT`/`WRONG`/`NO_ANSWER`/`DEAD`/`DNC`,
-  confirmed against the actual field picker in REISift's "Add Phone Status to Phones" action —
-  see `REISIFT_STATUS_BY_LOCAL_STATUS` in `reisiftOutbound.js`), `timestamp`.
-- `contact_added`: `reisiftPropertyUuid`, `contactName`, `relationship`, `propertyLabel`,
-  `phones` (array of `{ number, label }`), `timestamp`.
+- `reisiftPropertyUuid` plus the property's address as separate fields — `propertyStreet`,
+  `propertyCity`, `propertyState`, `propertyPostalCode` — since REISift's own Zapier actions
+  identify a property by its address, not by uuid.
+- `reisiftOwnerUuid` (blank if this is a brand-new contact REISift hasn't seen for this property
+  yet), `contactName`, `firstName`, `lastName` (best-effort split of `contactName` — everything
+  after the first word), `relationship`.
+- `phoneNumber`, `phoneLabel`.
+- `status` — already translated to REISift's own enum (`UNKNOWN`/`CORRECT`/`WRONG`/`NO_ANSWER`/
+  `DEAD`/`DNC`, confirmed against the actual field picker in REISift's "Add Phone Status to
+  Phones" action — see `REISIFT_STATUS_BY_LOCAL_STATUS` in `reisiftOutbound.js`), not this app's
+  own lowercase-hyphenated status values.
+- `propertyLabel`, `timestamp`.
 
 **Same eventual-consistency tolerance as the inbound side** — a push failure (Zap down, REISift
 rejecting the payload, network hiccup) never blocks or fails the local save; it's logged to the
 console and reported through the same `🔄` status line the inbound sync already uses in the
 Property drawer, prefixed `→ REISift:` so you can tell the two directions apart. A failed push
 isn't retried automatically — the change stays correct locally, just not reflected in REISift
-until the next time that phone/contact is touched (or you retrigger it by hand).
+until that phone is dispositioned again (or you retrigger it by hand).
 
-**Known limitation — a brief duplicate window on new contacts.** After a `contact_added` push,
-REISift creates the owner and (if a webhook/sequence is wired for it) syncs it back with a new
-`owner.uuid`. The inbound merge tries to attach that uuid to the matching local-only contact
-(matched by name + a shared phone number) rather than creating a second copy, but if REISift takes
-a while to sync back, or the name/number don't match closely enough, you may briefly see two
-entries for the same person until that sync lands — safe to just delete the older local-only one
-once it does.
+**Known limitation — a brief duplicate window on brand-new contacts.** After pushing a
+disposition for a contact REISift didn't have yet, if your Zap creates that owner in REISift and a
+webhook/sequence syncs it back, the inbound merge tries to attach the new `owner.uuid` to the
+matching local-only contact (matched by name + a shared phone number) rather than creating a
+second copy — but if the sync is slow, or the name/number don't match closely enough, you may
+briefly see two entries for the same person until it lands. Safe to just delete the older one once
+it does.
 
 ### Manual entry still works
 
