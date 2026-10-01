@@ -19,7 +19,13 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-14
+    # macos-14's default Xcode (15.4) only ships the macOS 14.5 SDK, which
+    # can't satisfy native/audiotap/build.sh's `-target ...-macos15.0` (the
+    # Core Audio process-tap APIs require the macOS 15 SDK) — swiftc fails
+    # fast with an unsupported-deployment-target error. macos-15's default
+    # Xcode (16.4) ships the macOS 15.5 SDK, which covers it, and this
+    # project already requires macOS 15+ to run anyway.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
