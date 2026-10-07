@@ -264,6 +264,20 @@ logStatus("audiotap: watching for \"\(targetDescription)\" (output: \(Int(target
 
 var lastLoggedWaiting = false
 
+// A failure here (most commonly: audio-capture permission not granted yet)
+// used to retry every 1s with no backoff — since `session.start()` is what
+// actually triggers the system permission prompt, that meant a fresh
+// prompt roughly every second for as long as the target process (which
+// typically outlives a slow-to-respond user by a lot) kept running,
+// stacking up a dozen+ identical dialogs before anyone could click
+// Allow on one. Back off hard after the first couple of failures so at
+// most a small, bounded number of prompts can ever queue up — once
+// permission is actually granted, the very next attempt succeeds and
+// this backoff never matters again.
+var consecutiveStartFailures = 0
+let maxFastRetries = 2
+let backoffSeconds = 15.0
+
 while !shouldExit {
     guard let target = findTarget() else {
         if !lastLoggedWaiting {
@@ -279,10 +293,13 @@ while !shouldExit {
     do {
         try session.start(processObjectID: target.id)
         logStatus("audiotap: capturing \(targetDescription) (pid \(target.pid))")
+        consecutiveStartFailures = 0
     } catch {
-        logStatus("audiotap: failed to start capture: \(error). Retrying in 1s (check System Settings → Privacy & Security → Screen & System Audio Recording if this persists).")
+        consecutiveStartFailures += 1
+        let delay = consecutiveStartFailures <= maxFastRetries ? 1.0 : backoffSeconds
+        logStatus("audiotap: failed to start capture: \(error). Retrying in \(Int(delay))s (check System Settings → Privacy & Security → Microphone and Screen & System Audio Recording if this persists).")
         session.stop()
-        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        RunLoop.main.run(until: Date().addingTimeInterval(delay))
         continue
     }
 
