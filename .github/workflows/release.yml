@@ -38,8 +38,25 @@ jobs:
       - name: Build native audio-capture helper (universal arm64 + x86_64)
         run: npm run build:audiotap
 
-      - name: Build and publish the .dmg
-        run: npm run package:mac -- --publish always
+      - name: Build the .dmg
+        # No --publish here (deliberately) — electron-builder's own GitHub
+        # publish step uploads the .dmg/.blockmap/latest-mac.yml as
+        # separate parallel tasks, each independently doing a
+        # find-or-create-release-for-this-tag check. Those checks raced
+        # against each other on v0.1.0, v0.1.2, and v0.1.3 (all three
+        # created two release objects for the same tag at the identical
+        # timestamp, each holding a different subset of the assets),
+        # leaving GitHub's tag→release routing pointed at whichever one
+        # didn't get the real installer. Building locally into dist/ here
+        # and publishing everything in one atomic step below (which
+        # creates at most one release) removes the race entirely.
+        run: npm run package:mac
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.blockmap
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
