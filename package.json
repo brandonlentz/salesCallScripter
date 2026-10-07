@@ -1,6 +1,6 @@
 {
   "name": "sales-call-scripter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "AI-powered sales teleprompter built on the NEPQ framework",
   "main": "./out/main/index.js",
   "author": "Brandon Lentz",

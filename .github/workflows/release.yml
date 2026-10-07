@@ -39,18 +39,23 @@ jobs:
         run: npm run build:audiotap
 
       - name: Build the .dmg
-        # No --publish here (deliberately) — electron-builder's own GitHub
+        # --publish never is required, not just "omit --publish": electron-
+        # builder defaults to publishing on its own (policy 'onTagOrDraft')
+        # whenever a `publish` config exists in package.json AND it detects
+        # a CI environment (GitHub Actions always sets one) — regardless of
+        # whether --publish was passed. electron-builder's own GitHub
         # publish step uploads the .dmg/.blockmap/latest-mac.yml as
         # separate parallel tasks, each independently doing a
-        # find-or-create-release-for-this-tag check. Those checks raced
+        # find-or-create-release-for-this-tag check; those checks raced
         # against each other on v0.1.0, v0.1.2, and v0.1.3 (all three
         # created two release objects for the same tag at the identical
         # timestamp, each holding a different subset of the assets),
         # leaving GitHub's tag→release routing pointed at whichever one
         # didn't get the real installer. Building locally into dist/ here
-        # and publishing everything in one atomic step below (which
-        # creates at most one release) removes the race entirely.
-        run: npm run package:mac
+        # (explicitly not publishing) and publishing everything in one
+        # atomic step below (which creates at most one release) removes
+        # the race entirely.
+        run: npm run package:mac -- --publish never
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
