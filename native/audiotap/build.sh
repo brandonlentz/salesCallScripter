@@ -30,6 +30,20 @@ done
 lipo -create -output build/audiotap build/audiotap-arm64 build/audiotap-x86_64
 rm build/audiotap-arm64 build/audiotap-x86_64
 
-codesign --sign - --identifier com.salescallscripter.audiotap --force build/audiotap
+# CODESIGN_IDENTITY (set by .github/workflows/release.yml once a real
+# Developer ID cert is imported) switches this from an ad-hoc signature to
+# a real one with the hardened runtime — required because Apple's notary
+# service scans every executable bundled inside the .app, including this
+# one (shipped via package.json's extraResources), not just the top-level
+# app. An ad-hoc-signed nested binary fails notarization even if the main
+# app itself is properly signed. Local dev builds (no CODESIGN_IDENTITY)
+# keep the original ad-hoc signature — real signing needs a paid Developer
+# ID cert that isn't expected to be on every contributor's machine.
+if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+  codesign --sign "$CODESIGN_IDENTITY" --identifier com.salescallscripter.audiotap \
+    --options runtime --timestamp --force build/audiotap
+else
+  codesign --sign - --identifier com.salescallscripter.audiotap --force build/audiotap
+fi
 
 echo "Built universal (arm64 + x86_64) native/audiotap/build/audiotap"

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements required for notarization once this app is
+  signed with a real Developer ID (see package.json's build.mac config and
+  .github/workflows/release.yml). Not used for local unsigned dev builds —
+  electron-builder only applies these when hardenedRuntime + a real
+  identity are active.
+
+  This app is NOT sandboxed (App Sandbox entitlements like
+  com.apple.security.device.audio-input only matter inside a sandbox) — it
+  distributes as a plain Developer ID-signed .dmg, not through the Mac App
+  Store, so the TCC prompts for microphone/audio-capture come from the
+  NSMicrophoneUsageDescription/NSAudioCaptureUsageDescription strings in
+  Info.plist plus the actual API calls, not from an entitlement here.
+
+  These four are Electron's own standard hardened-runtime requirements —
+  without them, Electron's V8 JIT and any unsigned/mismatched-signature
+  native dependencies (node-gyp addons, etc.) fail at runtime under a
+  hardened, notarized build even though they work fine unsigned.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

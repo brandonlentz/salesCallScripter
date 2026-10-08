@@ -35,8 +35,52 @@ jobs:
 
       - run: npm ci
 
+      # Signs the app with a real Apple Developer ID instead of shipping
+      # unsigned — unsigned apps can't get a stable, persistent TCC
+      # identity, which is what caused teammates to see repeated/duplicate
+      # microphone permission prompts. No-ops entirely (steps below just
+      # skip signing/notarizing, exactly like before) until the three repo
+      # secrets below are added — see the README's code-signing section for
+      # how to generate them. Keychain is temporary and runner-local; it
+      # never touches anyone's real keychain.
+      - name: Import Developer ID certificate
+        if: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          echo -n "$MAC_CERT_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MAC_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/[" ]//g')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+          # Exported so native/audiotap/build.sh (next step) can sign the
+          # helper binary with it directly — electron-builder's own signing
+          # pass (in "Build the .dmg") auto-discovers the same identity
+          # from this keychain on its own, no further passing needed there.
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')
+          echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
       - name: Build native audio-capture helper (universal arm64 + x86_64)
         run: npm run build:audiotap
+
+      # notarytool (what electron-builder's notarization step shells out to)
+      # takes the App Store Connect API key as a file path, not raw
+      # content — this writes the secret's content to one before the build.
+      - name: Write App Store Connect API key
+        if: ${{ secrets.APPLE_API_KEY != '' }}
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/apple-api-key.p8"
+          echo "$APPLE_API_KEY_CONTENT" > "$KEY_PATH"
+          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Build the .dmg
         # --publish never is required, not just "omit --publish": electron-
@@ -55,7 +99,18 @@ jobs:
         # (explicitly not publishing) and publishing everything in one
         # atomic step below (which creates at most one release) removes
         # the race entirely.
+        # APPLE_API_KEY is set via $GITHUB_ENV by the step above (only when
+        # that secret exists); APPLE_API_KEY_ID/APPLE_API_ISSUER are plain
+        # strings, passed straight from secrets. electron-builder's
+        # notarization auto-detects from these three env vars — see
+        # node_modules/app-builder-lib/out/mac/MacTargetHelper.js. When none
+        # of the three signing/notarization secrets are set, every step
+        # above becomes a no-op and this produces the same unsigned build
+        # as before.
         run: npm run package:mac -- --publish never
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

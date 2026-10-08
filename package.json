@@ -44,7 +44,10 @@
     ],
     "mac": {
       "category": "public.app-category.business",
-      "identity": null,
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false,
       "target": [
         {
           "target": "dmg",

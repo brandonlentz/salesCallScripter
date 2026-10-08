@@ -127,6 +127,45 @@ git push origin v0.2.0
 No local build or Xcode needed for this either — the workflow runs on a GitHub-hosted macOS
 runner. Check the repo's **Actions** tab if a release doesn't show up within a few minutes.
 
+### Code signing (optional, but fixes repeated permission prompts)
+
+The app ships **unsigned** by default — no Apple Developer account required, zero cost, but
+unsigned apps can't get a stable macOS identity, which is why a teammate can see the same
+microphone permission prompt over and over even after granting it. Signing with a real Apple
+Developer ID fixes this permanently. Once set up, `.github/workflows/release.yml` signs and
+notarizes every release automatically — there's nothing to do per-release beyond the normal
+`git tag` / `git push`.
+
+**One-time setup:**
+
+1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/enroll/) ($99/yr)
+   — needs your real legal name/entity, and Apple's identity verification can take a day or two.
+2. Create a **Developer ID Application** certificate (not "Apple Distribution" — that's for the
+   App Store). Easiest via **Xcode → Settings → Accounts → Manage Certificates → + → Developer ID
+   Application**.
+3. In Keychain Access, find the new certificate under "My Certificates," right-click → **Export**,
+   and set a password — this gives you a `.p12` file.
+4. Generate an App Store Connect API key for notarization: [App Store Connect → Users and Access →
+   Integrations → App Store Connect
+   API](https://appstoreconnect.apple.com/access/integrations/api) → generate a key with role
+   **Developer**. Download the `.p8` file (one-time download — save it) and note the **Key ID** and
+   **Issuer ID** shown on that page.
+5. Add these as GitHub repo secrets (**Settings → Secrets and variables → Actions → New repository
+   secret**):
+
+   | Secret | Value |
+   | --- | --- |
+   | `MAC_CERT_P12_BASE64` | The `.p12` file, base64-encoded: `base64 -i DeveloperID.p12 \| pbcopy`, then paste |
+   | `MAC_CERT_PASSWORD` | The password set when exporting the `.p12` |
+   | `APPLE_API_KEY` | The full contents of the `.p8` file, pasted as-is |
+   | `APPLE_API_KEY_ID` | The Key ID from the App Store Connect API page |
+   | `APPLE_API_ISSUER` | The Issuer ID from the same page |
+
+That's it — the next tag pushed after these five secrets exist will produce a signed, notarized
+`.dmg`, and the first-launch Gatekeeper right-click step teammates currently need goes away too.
+Until all five are set, the workflow silently builds the same unsigned `.dmg` as before (nothing
+breaks in the meantime).
+
 ## Getting Started (development)
 
 This is the path for working on the code itself — running from a checkout of the repo instead of
