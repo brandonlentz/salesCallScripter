@@ -78,7 +78,7 @@ uploaded reference material (e.g. Jeremy Miner NEPQ training PDFs).
 - **Electron** — macOS desktop shell
 - **React + Vite** (via `electron-vite`) — renderer UI
 - **Deepgram** — live speech-to-text with speaker diarization
-- **Claude API** (Haiku 4.5) — real-time suggestion engine, grounded in the call scripts above,
+- **Claude API** (Haiku 5.5) — real-time suggestion engine, grounded in the call scripts above,
   tuned for low latency (see [Suggestion latency](#suggestion-latency) below)
 - **Swift / Core Audio** ([native/audiotap](native/audiotap)) — native macOS process-tap helper
   for caller-audio capture without a virtual audio device (see [Live Call](#live-call) below)
@@ -615,7 +615,7 @@ from a two-party consent state, that changes what's required.
 Target is a suggestion on screen within 1-2 seconds of the prospect finishing a sentence. To get
 there:
 
-- **Model:** Claude Haiku 4.5, not Sonnet — this is bounded classification/retrieval against a
+- **Model:** Claude Haiku 5.5, not Sonnet — this is bounded classification/retrieval against a
   fixed script (which line comes next), not open-ended generation, so Haiku is both fast enough
   and cheaper.
 - **Prompt caching:** the call script is identical on every request for a given call type +

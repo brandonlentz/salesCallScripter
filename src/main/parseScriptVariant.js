@@ -68,7 +68,7 @@ export async function parseScriptVariant(rawText) {
   }
 
   const message = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
+    model: 'claude-haiku-5-5',
     // A full multi-stage script (see the built-in INTRO_SCRIPT) runs a few
     // hundred tokens in, and structured JSON out roughly doubles that with
     // property-name/array overhead — this is headroom, not a target.
@@ -78,7 +78,7 @@ export async function parseScriptVariant(rawText) {
     messages: [{ role: 'user', content: rawText.trim().slice(0, 150000) }]
   })
 
-  recordUsage({ source: 'script-variant-parse', model: 'claude-haiku-4-5', usage: message.usage })
+  recordUsage({ source: 'script-variant-parse', model: 'claude-haiku-5-5', usage: message.usage })
 
   if (message.stop_reason === 'max_tokens') {
     throw new Error('Parser response was cut off before finishing — try pasting a shorter script.')

@@ -17,7 +17,7 @@ import { join } from 'node:path'
 // rates at the models this app actually calls. Update here if pricing
 // changes or a new model/call site is added.
 const PRICING = {
-  'claude-haiku-4-5': { input: 1.0, output: 5.0 },
+  'claude-haiku-5-5': { input: 0.1, output: 0.5 },
   'claude-opus-5': { input: 5.0, output: 25.0 }
 }
 // Cache tokens are priced relative to that model's input rate — writing to

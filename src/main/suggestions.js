@@ -52,14 +52,16 @@ export async function getSuggestions(
   const referenceContent = await getAllReferenceContent()
 
   const message = await anthropic.messages.create({
-    // Haiku 4.5: this is on the critical path of a live call (target is a
+    // Haiku 5.5: this is on the critical path of a live call (target is a
     // suggestion within 1-2s of the prospect finishing a sentence), and it's
     // a bounded classification/retrieval task grounded in the fixed call
-    // script, not open-ended reasoning — Haiku is fast enough for that and
-    // doesn't think unless asked, so there's no thinking/effort param to set
-    // (effort isn't supported on this model; omitting `thinking` is its
-    // "off" state).
-    model: 'claude-haiku-4-5',
+    // script, not open-ended reasoning. Unlike Haiku 4.5 (no thinking
+    // support at all), Haiku 5.5 runs adaptive thinking ON by default at
+    // `medium` effort — left alone, that's extra latency this call site
+    // can't afford, so effort is pinned to `low` to keep thinking minimal
+    // without disabling it outright (not separately configurable here).
+    model: 'claude-haiku-5-5',
+    output_config: { effort: 'low' },
     // Headroom above what 2-3 short suggestions should need (see
     // nepqPrompt.js) — the prompt enforces brevity, this is a backstop so a
     // stray verbose response gets a clear error instead of truncated JSON.
@@ -69,7 +71,7 @@ export async function getSuggestions(
         type: 'text',
         text: buildSystemPrompt(callType, sections, referenceContent),
         // The script text is identical on every request for a given call
-        // type + variant, so mark it cacheable. Note: Haiku 4.5's minimum
+        // type + variant, so mark it cacheable. Note: Haiku's minimum
         // cacheable prefix is 4096 tokens, and a single script usually runs
         // under that, so this may not actually hit cache today — left in
         // since it's free and starts paying off if scripts grow.
@@ -89,7 +91,7 @@ export async function getSuggestions(
   // This is the recurring call — fires roughly every time the prospect
   // finishes a sentence during a live call — so it's the main driver of the
   // real-time usage meter (see usageTracker.js/UsageMeter.jsx).
-  recordUsage({ source: 'suggestion', model: 'claude-haiku-4-5', usage: message.usage })
+  recordUsage({ source: 'suggestion', model: 'claude-haiku-5-5', usage: message.usage })
 
   const raw = message.content
     .filter((block) => block.type === 'text')

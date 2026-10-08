@@ -127,7 +127,7 @@ export async function parsePropertyText(rawText) {
   const cleaned = stripHtmlNoise(rawText.trim())
 
   const message = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
+    model: 'claude-haiku-5-5',
     max_tokens: 800,
     system: SYSTEM_PROMPT,
     output_config: { format: { type: 'json_schema', schema: PROPERTY_SCHEMA } },
@@ -138,7 +138,7 @@ export async function parsePropertyText(rawText) {
     messages: [{ role: 'user', content: cleaned.slice(0, 150000) }]
   })
 
-  recordUsage({ source: 'property-parse', model: 'claude-haiku-4-5', usage: message.usage })
+  recordUsage({ source: 'property-parse', model: 'claude-haiku-5-5', usage: message.usage })
 
   const block = message.content.find((b) => b.type === 'text')
   if (!block) {
