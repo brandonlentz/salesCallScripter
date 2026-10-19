@@ -16,7 +16,16 @@ const OFFER_OUTCOMES = [
 // — this is the first moment the rep is looking back at this specific call
 // rather than already dialing the next one, same reasoning LiveCallPanel's
 // Start Call prompt uses for phone-status disposition going out instead.
-export default function CallSummaryModal({ open, recordingDir, callType, status, error, analysis, onClose }) {
+export default function CallSummaryModal({
+  open,
+  recordingDir,
+  callType,
+  status,
+  error,
+  analysis,
+  onAnalyze,
+  onClose
+}) {
   const [offerOutcome, setOfferOutcomeState] = useState('')
 
   // Resets for each new call's popup rather than carrying over the last
@@ -78,6 +87,21 @@ export default function CallSummaryModal({ open, recordingDir, callType, status,
 
           {status === 'empty' && (
             <p className="panel__placeholder">No conversation was captured, so there&apos;s nothing to grade.</p>
+          )}
+
+          {status === 'skipped' && (
+            <p className="panel__placeholder">
+              Call was under a minute — too short to be worth grading, so it was skipped automatically.
+            </p>
+          )}
+
+          {status === 'prompt' && (
+            <div className="call-summary__prompt">
+              <p className="panel__hint">This call was under 5 minutes. Grade it against NEPQ?</p>
+              <button type="button" className="call-button call-button--start" onClick={onAnalyze}>
+                Analyze This Call
+              </button>
+            </div>
           )}
 
           {status === 'loading' && <p className="panel__hint">Grading the call against NEPQ…</p>}

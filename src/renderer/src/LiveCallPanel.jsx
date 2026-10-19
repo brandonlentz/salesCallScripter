@@ -29,6 +29,18 @@ const AUTO_SUGGEST_DEBOUNCE_MS = 300
 // that's gone to hold music, dead air, or was left connected and forgotten.
 const AUTO_END_SILENCE_MS = 5 * 60 * 1000
 
+// Post-call analysis duration gates, keyed off the call's actual length
+// (Start Call to End Call), not transcript size — a one-line "wrong
+// number" transcript and a 90-second real conversation both have *some*
+// text, but only one is worth grading. Under a minute essentially never
+// has anything worth grading (misdials, immediate hangups, voicemail
+// drops), so it's skipped outright with no option to override. Over 5
+// minutes is clearly a real conversation and gets graded automatically,
+// same as before this threshold existed. In between is a judgment call,
+// so it's offered rather than forced either way.
+const MIN_ANALYZE_DURATION_MS = 60 * 1000
+const AUTO_ANALYZE_DURATION_MS = 5 * 60 * 1000
+
 // Captures live-call audio and streams it to Deepgram via the main process.
 // Native audio capture only (see native/audiotap): a native Core Audio
 // process tap captures the call app's audio directly — no BlackHole/virtual
@@ -95,14 +107,26 @@ export default function LiveCallPanel({
   // button.
   const [copiedScriptId, setCopiedScriptId] = useState('')
   // Post-call popup (see CallSummaryModal.jsx) — status: 'loading' | 'ready'
-  // | 'error' | 'empty' (no conversation captured, e.g. a misdial).
-  const [summary, setSummary] = useState({ open: false, recordingDir: null, status: 'idle', error: '', analysis: null })
+  // | 'error' | 'empty' (no conversation captured, e.g. a misdial) |
+  // 'skipped' (under MIN_ANALYZE_DURATION_MS) | 'prompt' (in between —
+  // analysis offered, not forced). `transcript` is carried on the state so
+  // a later "Analyze This Call" click (the 'prompt' case) has something to
+  // send — entries/transcriptText are already cleared by then.
+  const [summary, setSummary] = useState({
+    open: false,
+    recordingDir: null,
+    status: 'idle',
+    error: '',
+    analysis: null,
+    transcript: ''
+  })
 
   const recordersRef = useRef({}) // channel -> MediaRecorder
   const streamsRef = useRef({}) // channel -> MediaStream, call-scoped (torn down on stop())
   const debounceRef = useRef(null)
   const unsubscribeRef = useRef([])
   const autoEndTimerRef = useRef(null) // see AUTO_END_SILENCE_MS above
+  const callStartedAtRef = useRef(null) // Date.now() when the call went live — see the duration gates above
 
   const transcriptText = entries
     .map((e) => `${e.speaker === 'rep' ? 'You' : 'Them'}: ${e.text}`)
@@ -253,7 +277,21 @@ export default function LiveCallPanel({
     // and then hears nothing at all for 5 minutes (hold music, dead air)
     // should still auto-end.
     scheduleAutoEnd()
+    callStartedAtRef.current = Date.now()
     setStatus('live')
+  }
+
+  // Runs the actual analysis call and updates `summary` in place — shared
+  // by stop()'s auto-trigger (call over AUTO_ANALYZE_DURATION_MS) and the
+  // modal's "Analyze This Call" button (the 'prompt' case, user-initiated).
+  async function runAnalysis(transcript, dir) {
+    setSummary((s) => ({ ...s, open: true, recordingDir: dir, status: 'loading', error: '', analysis: null }))
+    try {
+      const analysis = await window.api.callAnalysis.analyze(transcript, callType)
+      setSummary((s) => ({ ...s, status: 'ready', error: '', analysis }))
+    } catch (err) {
+      setSummary((s) => ({ ...s, status: 'error', error: err.message, analysis: null }))
+    }
   }
 
   async function stop() {
@@ -273,6 +311,8 @@ export default function LiveCallPanel({
     // still saved to disk in full either way (see recording.js), this only
     // resets what's shown on screen for the next call.
     const finalTranscript = transcriptTextRef.current
+    const callDurationMs = callStartedAtRef.current ? Date.now() - callStartedAtRef.current : null
+    callStartedAtRef.current = null
     const { dir } = await window.api.liveCall.stop(finalTranscript)
     setStatus('idle')
     setInterimText('')
@@ -282,16 +322,21 @@ export default function LiveCallPanel({
     // including a misdial/no-answer (nothing to grade, but still confirms
     // the recording).
     if (!finalTranscript.trim()) {
-      setSummary({ open: true, recordingDir: dir, status: 'empty', error: '', analysis: null })
+      setSummary({ open: true, recordingDir: dir, status: 'empty', error: '', analysis: null, transcript: '' })
       return
     }
-    setSummary({ open: true, recordingDir: dir, status: 'loading', error: '', analysis: null })
-    try {
-      const analysis = await window.api.callAnalysis.analyze(finalTranscript, callType)
-      setSummary({ open: true, recordingDir: dir, status: 'ready', error: '', analysis })
-    } catch (err) {
-      setSummary({ open: true, recordingDir: dir, status: 'error', error: err.message, analysis: null })
+
+    if (callDurationMs !== null && callDurationMs < MIN_ANALYZE_DURATION_MS) {
+      setSummary({ open: true, recordingDir: dir, status: 'skipped', error: '', analysis: null, transcript: finalTranscript })
+      return
     }
+
+    if (callDurationMs !== null && callDurationMs < AUTO_ANALYZE_DURATION_MS) {
+      setSummary({ open: true, recordingDir: dir, status: 'prompt', error: '', analysis: null, transcript: finalTranscript })
+      return
+    }
+
+    await runAnalysis(finalTranscript, dir)
   }
 
   function handleClear() {
@@ -455,6 +500,8 @@ export default function LiveCallPanel({
           yet, run <code>npm run build:audiotap</code> from the project root. A call auto-ends if
           nothing's transcribed from the other side for 5 minutes straight (hold music, dead air,
           or a call left connected and forgotten) — any sign they're talking resets that clock.
+          After End Call, calls under a minute are never graded, calls from 1-5 minutes let you
+          choose whether to grade them, and calls over 5 minutes are graded automatically.
         </p>
 
         {error && <p className="panel__error">{error}</p>}
@@ -513,6 +560,7 @@ export default function LiveCallPanel({
           status={summary.status}
           error={summary.error}
           analysis={summary.analysis}
+          onAnalyze={() => runAnalysis(summary.transcript, summary.recordingDir)}
           onClose={() => setSummary((s) => ({ ...s, open: false }))}
         />
       </section>

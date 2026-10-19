@@ -783,6 +783,13 @@ body {
   margin-bottom: 1rem;
 }
 
+.call-summary__prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
 .call-summary__offer-outcome .phone-status-row {
   justify-content: flex-start;
 }
