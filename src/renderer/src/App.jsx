@@ -34,6 +34,10 @@ const initialSuggestionState = {
   error: '',
   stage: null,
   stageRationale: '',
+  // null = not yet classified this call (not "no"/"not eager") — see
+  // nepqPrompt.js's AWARENESS & PRICE READINESS instructions.
+  problemAware: null,
+  eagerForOffer: null,
   suggestions: []
 }
 
@@ -304,6 +308,24 @@ function App() {
             )}
           {suggestionState.stageRationale && (
             <p className="panel__hint">{suggestionState.stageRationale}</p>
+          )}
+          {(suggestionState.problemAware !== null || suggestionState.eagerForOffer !== null) && (
+            <div className="suggestions-signals">
+              {suggestionState.problemAware !== null && (
+                <span
+                  className={`suggestions-signal${suggestionState.problemAware ? ' is-active' : ''}`}
+                >
+                  {suggestionState.problemAware ? '✓ Problem aware' : 'Not problem aware yet'}
+                </span>
+              )}
+              {suggestionState.eagerForOffer !== null && (
+                <span
+                  className={`suggestions-signal${suggestionState.eagerForOffer ? ' is-active' : ''}`}
+                >
+                  {suggestionState.eagerForOffer ? '✓ Pushing for a number' : 'Not pushing for a number'}
+                </span>
+              )}
+            </div>
           )}
           <ul className="suggestions-list">
             {suggestionState.suggestions.map((s, i) => (

@@ -127,6 +127,8 @@ function parseSuggestionResponse(raw, callType, sections) {
   return {
     stage: parsed.stage,
     stageRationale: parsed.stageRationale ?? '',
+    problemAware: parsed.problemAware ?? null,
+    eagerForOffer: parsed.eagerForOffer ?? null,
     suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : []
   }
 }
