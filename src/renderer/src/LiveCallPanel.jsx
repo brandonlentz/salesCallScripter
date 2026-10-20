@@ -437,6 +437,9 @@ export default function LiveCallPanel({
 
             {property?.dialedNumber && (
               <div className="start-call-overlay__secondary-actions">
+                <button type="button" onClick={() => window.api.dialer.call(property.dialedNumber)}>
+                  📞 Call
+                </button>
                 <button
                   type="button"
                   onClick={() => window.api.dialer.facetime(property.dialedNumber)}

@@ -197,41 +197,93 @@ function summarizeReisiftTaxStatus(p) {
   return bits.join('; ')
 }
 
+// REISift often packs a dozen numbers under one owner record where several
+// numbers actually belong to someone else entirely (a different heir,
+// spouse, associate) — tagged with whose it is, e.g. "Tiffany Reece -
+// Darlene great niece" (confirmed via a real webhook delivery; see the
+// README's Multiple contacts section and parseProperty.js's prompt, which
+// already does the equivalent splitting for the paste-and-parse path).
+// Requires at least a first+last name before the " - " so a plain
+// descriptor tag like "Mobile" or "Primary" (no name, no hyphen-separated
+// second part) never matches and just stays a cosmetic label as before.
+const PHONE_TAG_PERSON_PATTERN =
+  /^([A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){1,3})\s*-\s*(.+)$/
+
+function parsePhoneTagPerson(tags) {
+  for (const tag of tags ?? []) {
+    const match = PHONE_TAG_PERSON_PATTERN.exec(tag.trim())
+    if (match) return { name: match[1].trim(), relationship: match[2].trim() }
+  }
+  return null
+}
+
 // One REISift owner (the primary `owner` or one of `secondary_owners`)
-// into our contact shape. `owner.dnc` forces every one of their numbers to
-// our own 'dnc' status — see mergePhone below for why that's the one field
-// a sync is allowed to override unconditionally.
-function mapReisiftOwnerToContact(owner, relationship) {
-  if (!owner) return null
+// into one-or-more of our contacts — normally just the owner, but any of
+// their phones tagged as belonging to a different person (see
+// parsePhoneTagPerson above) get split into their own contact entry
+// instead of landing on the owner's. `owner.dnc` forces every one of the
+// owner's own numbers to our own 'dnc' status — see mergePhone below for
+// why that's the one field a sync is allowed to override unconditionally;
+// it's deliberately NOT applied to a split-off contact's numbers, since
+// `dnc` is a compliance flag on the owner record, not on whoever else's
+// number happened to be listed under it.
+function mapReisiftOwnerToContacts(owner, relationship) {
+  if (!owner) return []
   const name = [owner.first_name, owner.last_name].filter(Boolean).join(' ').trim() || owner.company || ''
-  return {
+  const nameKey = name.trim().toLowerCase()
+
+  const ownerPhones = []
+  const splitOff = new Map() // lowercased person name -> { name, relationship, phones }
+
+  for (const p of owner.phones ?? []) {
+    if (!p.number) continue
+    const phone = {
+      number: p.number,
+      label: (p.tags ?? []).join(', '),
+      // Otherwise use the phone's own status straight from REISift's
+      // payload (confirmed via a real webhook delivery: each phone
+      // carries its own UNKNOWN/CORRECT/WRONG/NO_ANSWER/DEAD/DNC,
+      // independent of tags).
+      status: fromReisiftPhoneStatus(p.status)
+    }
+    const tagged = parsePhoneTagPerson(p.tags)
+    const taggedKey = tagged?.name.toLowerCase()
+    if (tagged && taggedKey && taggedKey !== nameKey) {
+      if (!splitOff.has(taggedKey)) {
+        splitOff.set(taggedKey, { name: tagged.name, relationship: tagged.relationship, phones: [] })
+      }
+      splitOff.get(taggedKey).phones.push(phone)
+    } else {
+      ownerPhones.push(owner.dnc ? { ...phone, status: 'dnc' } : phone)
+    }
+  }
+
+  const ownerContact = {
     reisiftUuid: owner.uuid,
     name,
     relationship,
     deceased: !!owner.deceased,
-    phones: (owner.phones ?? [])
-      .filter((p) => p.number)
-      .map((p) => ({
-        number: p.number,
-        label: (p.tags ?? []).join(', '),
-        // owner.dnc (a compliance flag on the whole owner, not one number)
-        // forces every one of their phones regardless of that phone's own
-        // status — same override REISift itself applies. Otherwise use the
-        // phone's own status straight from REISift's payload (confirmed via
-        // a real webhook delivery: each phone carries its own
-        // UNKNOWN/CORRECT/WRONG/NO_ANSWER/DEAD/DNC, independent of tags).
-        status: owner.dnc ? 'dnc' : fromReisiftPhoneStatus(p.status)
-      }))
+    phones: ownerPhones
   }
+
+  const splitContacts = [...splitOff.values()].map((c) => ({
+    reisiftUuid: '',
+    name: c.name,
+    relationship: c.relationship,
+    deceased: false,
+    phones: c.phones
+  }))
+
+  return [ownerContact, ...splitContacts]
 }
 
 // Raw `property` object from the webhook payload (see the sample in the
 // README/commit history) into our local property shape.
 function mapReisiftProperty(raw) {
-  const ownerContact = mapReisiftOwnerToContact(raw.owner, 'owner')
-  const secondaryContacts = (raw.secondary_owners ?? [])
-    .map((o) => mapReisiftOwnerToContact(o, 'secondary owner'))
-    .filter(Boolean)
+  const [ownerContact, ...ownerSplitContacts] = mapReisiftOwnerToContacts(raw.owner, 'owner')
+  const secondaryContacts = (raw.secondary_owners ?? []).flatMap((o) =>
+    mapReisiftOwnerToContacts(o, 'secondary owner')
+  )
 
   return {
     reisiftUuid: raw.uuid,
@@ -247,12 +299,15 @@ function mapReisiftProperty(raw) {
     addressPostalCode: raw.address?.postal_code || '',
     deceasedName: ownerContact?.deceased ? ownerContact.name : '',
     taxStatus: summarizeReisiftTaxStatus(raw),
-    knownHeirs: secondaryContacts.map((c) => c.name).filter(Boolean).join(', '),
+    knownHeirs: [...ownerSplitContacts, ...secondaryContacts]
+      .map((c) => c.name)
+      .filter(Boolean)
+      .join(', '),
     priorContactNotes: raw.notes ?? '',
     reisiftStatus: raw.status ?? '',
     reisiftTags: raw.tags ?? [],
     reisiftLists: raw.lists ?? [],
-    contacts: [ownerContact, ...secondaryContacts].filter(Boolean)
+    contacts: [ownerContact, ...ownerSplitContacts, ...secondaryContacts].filter(Boolean)
   }
 }
 
@@ -284,7 +339,13 @@ function mergeReisiftContacts(existingContacts, incomingContacts) {
   const merged = existingContacts.map((c) => ({ ...c, phones: [...(c.phones ?? [])] }))
 
   for (const incoming of incomingContacts) {
-    let index = merged.findIndex((c) => c.reisiftUuid === incoming.reisiftUuid)
+    // Guarded on incoming.reisiftUuid being truthy — a phone-tag-derived
+    // split contact (see mapReisiftOwnerToContacts) has no uuid of its own
+    // and sets this to '', and an unguarded equality check here would
+    // match '' === '' against the FIRST other uuid-less contact in the
+    // array regardless of whether it's actually the same person. Those
+    // fall straight through to the name+phone fallback below instead.
+    let index = incoming.reisiftUuid ? merged.findIndex((c) => c.reisiftUuid === incoming.reisiftUuid) : -1
     // No reisiftUuid match — this may be a contact this app dispositioned
     // and pushed to REISift while brand-new (see reisiftOutbound.js's
     // notifyPhoneDispositioned) that REISift has now created and is

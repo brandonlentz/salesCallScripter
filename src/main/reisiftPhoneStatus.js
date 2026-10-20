@@ -1,5 +1,5 @@
 // Local <-> REISift phone-status enum mapping, shared by both sync
-// directions — properties.js's inbound mapReisiftOwnerToContact/mergePhone,
+// directions — properties.js's inbound mapReisiftOwnerToContacts/mergePhone,
 // and reisiftOutbound.js's outbound notifyPhoneDispositioned — so the two
 // never drift apart. REISift's enum is confirmed two ways: the field
 // picker on its "Add Phone Status to Phones" Zapier action, and real
