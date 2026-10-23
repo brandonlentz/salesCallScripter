@@ -26,6 +26,18 @@ jobs:
     # Xcode (16.4) ships the macOS 15.5 SDK, which covers it, and this
     # project already requires macOS 15+ to run anyway.
     runs-on: macos-15
+    # GitHub's workflow-file validator rejects `secrets.X` referenced
+    # directly inside a step-level `if:` ("Unrecognized named-value:
+    # 'secrets'") — confirmed via a real failed run (the Apple signing
+    # commit broke every push to main with this exact error from the day
+    # it landed, release tags included, since GitHub refuses to create a
+    # run at all for a workflow file it can't validate). Resolving the
+    # secret into a job-level env var first and checking that in `if:`
+    # instead is the documented workaround — same conditional behavior,
+    # parser-safe.
+    env:
+      HAS_MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+      HAS_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +56,7 @@ jobs:
       # how to generate them. Keychain is temporary and runner-local; it
       # never touches anyone's real keychain.
       - name: Import Developer ID certificate
-        if: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+        if: ${{ env.HAS_MAC_CERT == 'true' }}
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -74,7 +86,7 @@ jobs:
       # takes the App Store Connect API key as a file path, not raw
       # content — this writes the secret's content to one before the build.
       - name: Write App Store Connect API key
-        if: ${{ secrets.APPLE_API_KEY != '' }}
+        if: ${{ env.HAS_APPLE_API_KEY == 'true' }}
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
         run: |
