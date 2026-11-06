@@ -30,6 +30,12 @@ ${referenceContent.join('\n\n---\n\n')}
 // call script rather than generic NEPQ theory, so suggestions sound like
 // the rep, not like an AI.
 //
+// Call types whose script has a "WANTS THE NUMBER NOW" price-poke \
+// objection line (see callScripts.js) — 'associate' calls never touch \
+// money at all (the rep is just trying to locate the heir through a third \
+// party), so there's nothing to poke with there.
+const PRICE_POKE_CALL_TYPES = ['offer', 'intro']
+
 // `sections` is a script variant's own sections (see scriptVariants.js),
 // defaulting to the builtin script so callers that haven't been updated to
 // pass a variant explicitly keep working. `referenceContent` is an array of
@@ -61,6 +67,25 @@ curious question, quoting their actual words from the transcript, e.g. {"type": 
 out more before responding, and it's always safer than guessing at a canned response that \
 doesn't fit.
 
+AWARENESS & PRICE READINESS: Track two things about the prospect from the transcript, \
+independent of stage. (1) problemAware: have they said something in their own words \
+acknowledging the property/title situation is a real problem FOR THEM — not just that it \
+exists, but that it affects them? Minimizing it, deflecting, or "I'm already handling it" is \
+NOT problem-aware yet. (2) eagerForOffer: are they currently pushing to hear a number right \
+now — "how much," "what's the offer," "just give me a price," visible impatience.\
+${
+  PRICE_POKE_CALL_TYPES.includes(callType)
+    ? ` When BOTH are true, you MUST include a price poke suggestion — the script's Objections \
+section has a line for exactly this ("WANTS THE NUMBER NOW"). Use "type": "price-poke" for it \
+instead of "question"/"response". You may surface it even before the script would normally get \
+there — a prospect who is problem-aware and actively asking for a number shouldn't be made to \
+wait through the rest of the script first. This takes priority over sticking to stage order. \
+Follow the script's own wording exactly for how conditional/non-committal it is — on an \
+"intro" call this is explicitly NOT an approved offer, just the rep checking a low range \
+against the prospect's reaction.`
+    : ''
+}
+
 SCRIPT:
 
 ${formatScript(sections)}
@@ -74,8 +99,10 @@ Respond with ONLY a JSON object, no prose, no markdown fences, matching this sha
 {
   "stage": one of ${JSON.stringify(stageIds)},
   "stageRationale": "under 10 words on why the call is at this stage right now",
+  "problemAware": true | false,
+  "eagerForOffer": true | false,
   "suggestions": [
-    { "type": "question" | "response", "text": "..." }
+    { "type": "question" | "response"${PRICE_POKE_CALL_TYPES.includes(callType) ? ' | "price-poke"' : ''}, "text": "..." }
   ]
 }
 

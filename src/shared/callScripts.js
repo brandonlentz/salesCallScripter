@@ -101,7 +101,8 @@ const INTRO_SCRIPT = [
       `DON'T HAVE TIME / CALL ME LATER: "Totally understand — is there a better time today or tomorrow, or should I just text you the basics so you have it either way?"`,
       `HOW DID YOU GET MY NUMBER: "Public records tied to the property — that's actually part of why I'm calling, so I wanted to be upfront about it." [PAUSE]`,
       `CAN YOU JUST EMAIL/TEXT ME: "Happy to send something over after we talk for two minutes — that way what I send actually answers your questions instead of raising more."`,
-      `I DON'T KNOW ANYTHING ABOUT THAT: [MIRROR] "You don't know anything about it?" [curious tone, PAUSE] "That's actually really common — most people we talk to are hearing about this for the first time."`
+      `I DON'T KNOW ANYTHING ABOUT THAT: [MIRROR] "You don't know anything about it?" [curious tone, PAUSE] "That's actually really common — most people we talk to are hearing about this for the first time."`,
+      `WANTS THE NUMBER NOW (price poke — they're pushing for a number before pivot/decision-makers; NOT a formal offer, nothing approved yet): "I don't want to get ahead of myself, but if I possibly can get you an offer — which would be awesome — I might be able to get you something in the [LOW RANGE, e.g. $1,000–$2,000] range." "And if I can get that approved, would that be a win for you?" IF UPSET OR HARD NO: [Apologize — nothing is set in stone, you were just checking.] "What kind of offer would get you excited?"`
     ]
   }
 ]
@@ -158,6 +159,7 @@ const OFFER_SCRIPT = [
     lines: [
       `THINK ABOUT IT: "How long do you need?" [QUIET] "What exactly do you have to figure out between now and then?"`,
       `SPOUSE: "As you talk with them, what do you think their main concern will be?" [They reveal real objection]`,
+      `WANTS THE NUMBER NOW (price poke — they're pushing for a number before the pain recap/offer-delivery stage): "I hear you, and I don't want to dance around it — if everything lines up the way you've described, you're probably looking at something in the [RANGE] ballpark." [Soft, conditional — NOT the formal offer.] "But let me walk you through a couple quick things first so that number actually means something when I get there."`,
       `TOO LOW: "Given everything going on, what do you think would be a fair number?" [SHUT UP]`,
       `SCAM: "[Seller], put yourself in my shoes — how do I know I'm paying the right person? That's why we use a licensed notary. [playful]"`,
       `WANT TO GET IT APPRAISED / ANOTHER OPINION: "Makes sense — what would you want to see happen if that number came back different than mine?" [PAUSE — let them reveal their real bar]`,

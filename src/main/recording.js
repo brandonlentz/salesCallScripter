@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -31,6 +31,18 @@ function extFor(channel, channelFormats) {
 }
 function ffmpegInputArgsFor(channel, channelFormats) {
   return channelFormats?.[channel]?.ffmpegArgs ?? []
+}
+
+// A packaged app launched from Finder/the Dock inherits launchd's minimal
+// PATH (/usr/bin:/bin:/usr/sbin:/sbin) — not the shell's — so a Homebrew
+// ffmpeg is invisible to a bare spawn('ffmpeg') even when it's installed.
+// Dev runs from a terminal and never hit this. Check Homebrew's two
+// install prefixes (Apple Silicon, then Intel) before falling back to PATH.
+function ffmpegBinary() {
+  for (const candidate of ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg']) {
+    if (existsSync(candidate)) return candidate
+  }
+  return 'ffmpeg'
 }
 
 // Dual-stream calls record the rep and prospect as separate mono files —
@@ -78,7 +90,7 @@ function mergeChannels(dir, channelFormats, channelStartedAt = {}) {
   const prospectDelayMs = earliest != null ? prospectStart - earliest : 0
 
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
+    const ffmpeg = spawn(ffmpegBinary(), [
       '-y',
       ...ffmpegInputArgsFor('rep', channelFormats),
       '-i',

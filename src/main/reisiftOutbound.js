@@ -57,7 +57,7 @@ function reisiftAddressFields(property) {
   }
 }
 
-// REISift's inbound owner shape (see mapReisiftOwnerToContact) always has
+// REISift's inbound owner shape (see mapReisiftOwnerToContacts) always has
 // separate first_name/last_name — its Create/Update actions likely want the
 // same, not the single combined `name` string this app stores locally, so
 // split it back out. Best-effort: everything after the first word is
