@@ -1,6 +1,6 @@
 {
   "name": "sales-call-scripter",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "AI-powered sales teleprompter built on the NEPQ framework",
   "main": "./out/main/index.js",
   "author": "Brandon Lentz",
@@ -49,7 +49,8 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "gatekeeperAssess": false,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Sales Call Scripter needs microphone access to record and transcribe your side of the call."
+        "NSMicrophoneUsageDescription": "Sales Call Scripter needs microphone access to record and transcribe your side of the call.",
+        "NSAudioCaptureUsageDescription": "Sales Call Scripter needs to capture call audio to record and transcribe the other side of the call."
       },
       "target": [
         {
